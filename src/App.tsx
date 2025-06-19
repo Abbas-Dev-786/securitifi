@@ -1,26 +1,26 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { ToastContainer } from 'react-toastify';
-import { Web3Provider } from './contexts/Web3Context';
-import { ThemeProvider } from './contexts/ThemeContext';
-import Navbar from './components/layout/Navbar';
-import Sidebar from './components/layout/Sidebar';
-import Dashboard from './pages/Dashboard';
-import Properties from './pages/Properties';
-import Lending from './pages/Lending';
-import RentDistribution from './pages/RentDistribution';
-import Bridge from './pages/Bridge';
-import ProofOfReserves from './pages/ProofOfReserves';
-import Portfolio from './pages/Portfolio';
-import Settings from './pages/Settings';
-import Landing from './pages/Landing';
-import { useWeb3 } from './contexts/Web3Context';
-import 'react-toastify/dist/ReactToastify.css';
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { ToastContainer } from "react-toastify";
+import { AppKitProvider } from "./contexts/Web3Context";
+import { ThemeProvider } from "./contexts/ThemeContext";
+import Navbar from "./components/layout/Navbar";
+import Sidebar from "./components/layout/Sidebar";
+import Dashboard from "./pages/Dashboard";
+import Properties from "./pages/Properties";
+import Lending from "./pages/Lending";
+import RentDistribution from "./pages/RentDistribution";
+import Bridge from "./pages/Bridge";
+import ProofOfReserves from "./pages/ProofOfReserves";
+import Portfolio from "./pages/Portfolio";
+import Settings from "./pages/Settings";
+import Landing from "./pages/Landing";
+import "react-toastify/dist/ReactToastify.css";
+import { useAppKitAccount } from "@reown/appkit/react";
 
 const AppContent: React.FC = () => {
-  const { wallet } = useWeb3();
+  const { isConnected } = useAppKitAccount();
 
-  if (!wallet.isConnected) {
+  if (!isConnected) {
     return <Landing />;
   }
 
@@ -51,7 +51,7 @@ const AppContent: React.FC = () => {
 function App() {
   return (
     <ThemeProvider>
-      <Web3Provider>
+      <AppKitProvider>
         <Router>
           <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
             <AppContent />
@@ -70,7 +70,7 @@ function App() {
             />
           </div>
         </Router>
-      </Web3Provider>
+      </AppKitProvider>
     </ThemeProvider>
   );
 }

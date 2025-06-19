@@ -1,8 +1,16 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { X, Upload, MapPin, DollarSign, Home, Bed, Bath, Square } from 'lucide-react';
-import { usePropertyManager } from '../../hooks/usePropertyManager';
-import { PropertyFormData } from '../../types';
+import React, { useState } from "react";
+import { motion } from "framer-motion";
+import {
+  X,
+  Upload,
+  MapPin,
+  DollarSign,
+  Home,
+  Bed,
+  Bath,
+  Square,
+} from "lucide-react";
+import { PropertyFormData } from "../../types";
 
 interface PropertyFormProps {
   onClose: () => void;
@@ -10,16 +18,21 @@ interface PropertyFormProps {
 }
 
 const PropertyForm: React.FC<PropertyFormProps> = ({ onClose, onSuccess }) => {
-  const { mintProperty, loading } = usePropertyManager();
+  const { mintProperty, loading } = {
+    mintProperty: (data: PropertyFormData) => {
+      console.log(data);
+    },
+    loading: false,
+  };
   const [formData, setFormData] = useState<PropertyFormData>({
-    propertyAddress: '',
-    propertyValue: '',
-    description: '',
-    imageUrl: '',
-    propertyType: 'residential',
+    propertyAddress: "",
+    propertyValue: "",
+    description: "",
+    imageUrl: "",
+    propertyType: "residential",
     bedrooms: 3,
     bathrooms: 2,
-    squareFootage: 1500
+    squareFootage: 1500,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -28,17 +41,22 @@ const PropertyForm: React.FC<PropertyFormProps> = ({ onClose, onSuccess }) => {
       await mintProperty(formData);
       onSuccess();
     } catch (error) {
-      console.error('Failed to mint property:', error);
+      console.error("Failed to mint property:", error);
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: name === 'bedrooms' || name === 'bathrooms' || name === 'squareFootage' 
-        ? parseInt(value) || 0 
-        : value
+      [name]:
+        name === "bedrooms" || name === "bathrooms" || name === "squareFootage"
+          ? parseInt(value) || 0
+          : value,
     }));
   };
 
@@ -232,7 +250,7 @@ const PropertyForm: React.FC<PropertyFormProps> = ({ onClose, onSuccess }) => {
               disabled={loading}
               className="px-6 py-3 bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Tokenizing...' : 'Tokenize Property'}
+              {loading ? "Tokenizing..." : "Tokenize Property"}
             </button>
           </div>
         </form>

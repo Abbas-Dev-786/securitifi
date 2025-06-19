@@ -1,28 +1,67 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, Search, Filter, MapPin, Eye, Edit, Trash2, Shield, Check, X } from 'lucide-react';
-import { usePropertyManager } from '../hooks/usePropertyManager';
-import PropertyForm from '../components/property/PropertyForm';
-import { Property } from '../types';
-import { formatEther } from 'ethers';
+import React, { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import {
+  Plus,
+  Search,
+  Filter,
+  MapPin,
+  Eye,
+  Edit,
+  Shield,
+  Check,
+  X,
+} from "lucide-react";
+import PropertyForm from "../components/property/PropertyForm";
+import { formatEther } from "ethers";
 
 const Properties: React.FC = () => {
-  const { properties, fetchUserProperties, verifyProperty, loading } = usePropertyManager();
+  const { properties, fetchUserProperties, verifyProperty, loading } = {
+    properties: [
+      {
+        id: 1,
+        propertyAddress: "0x1234...5678",
+        isVerified: true,
+        owner: "0x1234...5678",
+        propertyValue: "1000000000000000000",
+        metadataURI: "https://example.com",
+        createdAt: new Date(),
+      },
+      {
+        id: 2,
+        propertyAddress: "0xabcd...efgh",
+        isVerified: false,
+        owner: "0xabcd...efgh",
+        propertyValue: "2000000000000000000",
+        metadataURI: "https://example.com",
+        createdAt: new Date(),
+      },
+    ],
+    fetchUserProperties: () => {
+      console.log("Fetching user properties");
+    },
+    verifyProperty: (id: number) => {
+      console.log("Verifying property", id);
+    },
+    loading: false,
+  };
   const [showForm, setShowForm] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [selectedProperty, setSelectedProperty] = useState<any>(null);
 
   useEffect(() => {
     fetchUserProperties();
   }, [fetchUserProperties]);
 
-  const filteredProperties = properties.filter(property => {
-    const matchesSearch = property.propertyAddress.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || 
-      (filterStatus === 'verified' && property.isVerified) ||
-      (filterStatus === 'unverified' && !property.isVerified);
-    
+  const filteredProperties = properties.filter((property) => {
+    const matchesSearch = property.propertyAddress
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
+    const matchesFilter =
+      filterStatus === "all" ||
+      (filterStatus === "verified" && property.isVerified) ||
+      (filterStatus === "unverified" && !property.isVerified);
+
     return matchesSearch && matchesFilter;
   });
 
@@ -30,7 +69,7 @@ const Properties: React.FC = () => {
     try {
       await verifyProperty(tokenId);
     } catch (error) {
-      console.error('Failed to verify property:', error);
+      console.error("Failed to verify property:", error);
     }
   };
 
@@ -43,7 +82,9 @@ const Properties: React.FC = () => {
         className="flex flex-col md:flex-row md:items-center md:justify-between"
       >
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Properties</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Properties
+          </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
             Manage your tokenized real estate portfolio
           </p>
@@ -94,7 +135,10 @@ const Properties: React.FC = () => {
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl p-6 border border-gray-200 dark:border-gray-700 shadow-lg animate-pulse">
+            <div
+              key={i}
+              className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl p-6 border border-gray-200 dark:border-gray-700 shadow-lg animate-pulse"
+            >
               <div className="w-full h-48 bg-gray-300 dark:bg-gray-600 rounded-lg mb-4"></div>
               <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded mb-2"></div>
               <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-2/3"></div>
@@ -115,12 +159,11 @@ const Properties: React.FC = () => {
               No Properties Found
             </h3>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              {searchTerm || filterStatus !== 'all' 
-                ? 'Try adjusting your search or filter criteria'
-                : 'Get started by tokenizing your first property'
-              }
+              {searchTerm || filterStatus !== "all"
+                ? "Try adjusting your search or filter criteria"
+                : "Get started by tokenizing your first property"}
             </p>
-            {!searchTerm && filterStatus === 'all' && (
+            {!searchTerm && filterStatus === "all" && (
               <button
                 onClick={() => setShowForm(true)}
                 className="bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200"
@@ -158,7 +201,7 @@ const Properties: React.FC = () => {
                   )}
                 </div>
               </div>
-              
+
               <div className="p-6">
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
@@ -176,14 +219,17 @@ const Properties: React.FC = () => {
                     </button>
                   </div>
                 </div>
-                
+
                 <div className="space-y-2 mb-4">
                   <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
                     <MapPin className="w-4 h-4 mr-2" />
                     <span className="truncate">{property.propertyAddress}</span>
                   </div>
                   <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    ${parseFloat(formatEther(property.propertyValue)).toLocaleString()}
+                    $
+                    {parseFloat(
+                      formatEther(property.propertyValue)
+                    ).toLocaleString()}
                   </div>
                 </div>
 
@@ -205,7 +251,7 @@ const Properties: React.FC = () => {
 
       {/* Property Form Modal */}
       {showForm && (
-        <PropertyForm 
+        <PropertyForm
           onClose={() => setShowForm(false)}
           onSuccess={() => {
             setShowForm(false);
@@ -243,31 +289,56 @@ const Properties: React.FC = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-gray-600 dark:text-gray-400">Token ID</label>
-                  <p className="font-semibold text-gray-900 dark:text-white">#{selectedProperty.id}</p>
+                  <label className="text-sm text-gray-600 dark:text-gray-400">
+                    Token ID
+                  </label>
+                  <p className="font-semibold text-gray-900 dark:text-white">
+                    #{selectedProperty.id}
+                  </p>
                 </div>
                 <div>
-                  <label className="text-sm text-gray-600 dark:text-gray-400">Status</label>
-                  <p className={`font-semibold ${selectedProperty.isVerified ? 'text-green-500' : 'text-yellow-500'}`}>
-                    {selectedProperty.isVerified ? 'Verified' : 'Pending Verification'}
+                  <label className="text-sm text-gray-600 dark:text-gray-400">
+                    Status
+                  </label>
+                  <p
+                    className={`font-semibold ${
+                      selectedProperty.isVerified
+                        ? "text-green-500"
+                        : "text-yellow-500"
+                    }`}
+                  >
+                    {selectedProperty.isVerified
+                      ? "Verified"
+                      : "Pending Verification"}
                   </p>
                 </div>
               </div>
 
               <div>
-                <label className="text-sm text-gray-600 dark:text-gray-400">Property Address</label>
-                <p className="font-semibold text-gray-900 dark:text-white">{selectedProperty.propertyAddress}</p>
-              </div>
-
-              <div>
-                <label className="text-sm text-gray-600 dark:text-gray-400">Property Value</label>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  ${parseFloat(formatEther(selectedProperty.propertyValue)).toLocaleString()}
+                <label className="text-sm text-gray-600 dark:text-gray-400">
+                  Property Address
+                </label>
+                <p className="font-semibold text-gray-900 dark:text-white">
+                  {selectedProperty.propertyAddress}
                 </p>
               </div>
 
               <div>
-                <label className="text-sm text-gray-600 dark:text-gray-400">Owner</label>
+                <label className="text-sm text-gray-600 dark:text-gray-400">
+                  Property Value
+                </label>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  $
+                  {parseFloat(
+                    formatEther(selectedProperty.propertyValue)
+                  ).toLocaleString()}
+                </p>
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-600 dark:text-gray-400">
+                  Owner
+                </label>
                 <p className="font-mono text-sm text-gray-900 dark:text-white break-all">
                   {selectedProperty.owner}
                 </p>

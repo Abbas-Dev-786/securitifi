@@ -1,67 +1,110 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowLeftRight, ArrowDown, Clock, CheckCircle, AlertCircle, ExternalLink, RefreshCw, Zap } from 'lucide-react';
-import { useCCIPBridge, Transfer } from '../hooks/useCCIPBridge';
-import { usePropertyManager } from '../hooks/usePropertyManager';
+import React, { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import {
+  ArrowLeftRight,
+  ArrowDown,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  ExternalLink,
+  RefreshCw,
+  Zap,
+} from "lucide-react";
 
 const Bridge: React.FC = () => {
-  const { lockAndSend, transfers, loading } = useCCIPBridge();
-  const { properties, fetchUserProperties } = usePropertyManager();
-  
-  const [fromChain, setFromChain] = useState('sepolia');
-  const [toChain, setToChain] = useState('mumbai');
+  const { lockAndSend, transfers, loading } = {
+    lockAndSend: (
+      recipient: string,
+      propertyId: number,
+      amount: string,
+      toChain: string
+    ) => {
+      console.log(
+        "Locking and sending",
+        recipient,
+        propertyId,
+        amount,
+        toChain
+      );
+    },
+    transfers: [
+      {
+        id: 1,
+        recipient: "0x1234...5678",
+        propertyId: 1,
+        amount: "1000000000000000000",
+        status: "confirmed",
+        timestamp: new Date(),
+        destinationChain: "mumbai",
+        txHash: "0x1234...5678",
+      },
+    ],
+    loading: false,
+  };
+  const { properties, fetchUserProperties } = {
+    properties: [
+      { id: 1, propertyAddress: "0x1234...5678" },
+      { id: 2, propertyAddress: "0xabcd...efgh" },
+    ],
+    fetchUserProperties: () => {},
+  };
+
+  const [fromChain, setFromChain] = useState("sepolia");
+  const [toChain, setToChain] = useState("mumbai");
   const [formData, setFormData] = useState({
-    recipient: '',
-    propertyId: '',
-    amount: ''
+    recipient: "",
+    propertyId: "",
+    amount: "",
   });
 
   const chains = [
-    { 
-      id: 'sepolia', 
-      name: 'Sepolia Testnet', 
-      symbol: 'ETH', 
-      color: 'from-blue-500 to-blue-600',
-      explorer: 'https://sepolia.etherscan.io'
+    {
+      id: "sepolia",
+      name: "Sepolia Testnet",
+      symbol: "ETH",
+      color: "from-blue-500 to-blue-600",
+      explorer: "https://sepolia.etherscan.io",
     },
-    { 
-      id: 'mumbai', 
-      name: 'Mumbai Testnet', 
-      symbol: 'MATIC', 
-      color: 'from-purple-500 to-purple-600',
-      explorer: 'https://mumbai.polygonscan.com'
+    {
+      id: "mumbai",
+      name: "Mumbai Testnet",
+      symbol: "MATIC",
+      color: "from-purple-500 to-purple-600",
+      explorer: "https://mumbai.polygonscan.com",
     },
   ];
 
   const stats = [
     {
-      title: 'Total Transfers',
+      title: "Total Transfers",
       value: transfers.length.toString(),
-      change: '+3 this week',
+      change: "+3 this week",
       icon: ArrowLeftRight,
-      color: 'from-blue-500 to-cyan-500'
+      color: "from-blue-500 to-cyan-500",
     },
     {
-      title: 'Successful Transfers',
-      value: transfers.filter(t => t.status === 'confirmed').length.toString(),
-      change: '98.5% success rate',
+      title: "Successful Transfers",
+      value: transfers
+        .filter((t) => t.status === "confirmed")
+        .length.toString(),
+      change: "98.5% success rate",
       icon: CheckCircle,
-      color: 'from-green-500 to-emerald-500'
+      color: "from-green-500 to-emerald-500",
     },
     {
-      title: 'Pending Transfers',
-      value: transfers.filter(t => t.status === 'pending').length.toString(),
-      change: 'Avg 15 min',
+      title: "Pending Transfers",
+      value: transfers.filter((t) => t.status === "pending").length.toString(),
+      change: "Avg 15 min",
       icon: Clock,
-      color: 'from-yellow-500 to-orange-500'
+      color: "from-yellow-500 to-orange-500",
     },
     {
-      title: 'Volume Transferred',
-      value: '$125,000',
-      change: '+24% this month',
+      title: "Volume Transferred",
+      value: "$125,000",
+      change: "+24% this month",
       icon: Zap,
-      color: 'from-purple-500 to-pink-500'
-    }
+      color: "from-purple-500 to-pink-500",
+    },
   ];
 
   useEffect(() => {
@@ -74,9 +117,11 @@ const Bridge: React.FC = () => {
     setToChain(temp);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleTransfer = async (e: React.FormEvent) => {
@@ -88,23 +133,23 @@ const Bridge: React.FC = () => {
         formData.amount,
         toChain
       );
-      setFormData({ recipient: '', propertyId: '', amount: '' });
+      setFormData({ recipient: "", propertyId: "", amount: "" });
     } catch (error) {
-      console.error('Failed to initiate transfer:', error);
+      console.error("Failed to initiate transfer:", error);
     }
   };
 
   const getChainInfo = (chainId: string) => {
-    return chains.find(chain => chain.id === chainId);
+    return chains.find((chain) => chain.id === chainId);
   };
 
-  const getStatusIcon = (status: Transfer['status']) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'confirmed':
+      case "confirmed":
         return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case 'pending':
+      case "pending":
         return <Clock className="w-4 h-4 text-yellow-500" />;
-      case 'failed':
+      case "failed":
         return <AlertCircle className="w-4 h-4 text-red-500" />;
       default:
         return <Clock className="w-4 h-4 text-gray-500" />;
@@ -120,7 +165,9 @@ const Bridge: React.FC = () => {
         className="flex flex-col md:flex-row md:items-center md:justify-between"
       >
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Cross-Chain Bridge</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Cross-Chain Bridge
+          </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
             Transfer property tokens securely between different blockchains
           </p>
@@ -144,11 +191,17 @@ const Bridge: React.FC = () => {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{stat.title}</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">{stat.value}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  {stat.title}
+                </p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+                  {stat.value}
+                </p>
                 <p className="text-sm text-green-500 mt-1">{stat.change}</p>
               </div>
-              <div className={`w-12 h-12 rounded-lg bg-gradient-to-r ${stat.color} flex items-center justify-center`}>
+              <div
+                className={`w-12 h-12 rounded-lg bg-gradient-to-r ${stat.color} flex items-center justify-center`}
+              >
                 <stat.icon className="w-6 h-6 text-white" />
               </div>
             </div>
@@ -182,7 +235,11 @@ const Bridge: React.FC = () => {
                     className="bg-transparent text-lg font-semibold text-gray-900 dark:text-white outline-none"
                   >
                     {chains.map((chain) => (
-                      <option key={chain.id} value={chain.id} className="bg-gray-50 dark:bg-gray-700">
+                      <option
+                        key={chain.id}
+                        value={chain.id}
+                        className="bg-gray-50 dark:bg-gray-700"
+                      >
                         {chain.name}
                       </option>
                     ))}
@@ -191,7 +248,7 @@ const Bridge: React.FC = () => {
                     Balance: 2.45 {getChainInfo(fromChain)?.symbol}
                   </span>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -212,7 +269,7 @@ const Bridge: React.FC = () => {
                       ))}
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Amount
@@ -256,17 +313,23 @@ const Bridge: React.FC = () => {
                     onChange={(e) => setToChain(e.target.value)}
                     className="bg-transparent text-lg font-semibold text-gray-900 dark:text-white outline-none"
                   >
-                    {chains.filter(chain => chain.id !== fromChain).map((chain) => (
-                      <option key={chain.id} value={chain.id} className="bg-gray-50 dark:bg-gray-700">
-                        {chain.name}
-                      </option>
-                    ))}
+                    {chains
+                      .filter((chain) => chain.id !== fromChain)
+                      .map((chain) => (
+                        <option
+                          key={chain.id}
+                          value={chain.id}
+                          className="bg-gray-50 dark:bg-gray-700"
+                        >
+                          {chain.name}
+                        </option>
+                      ))}
                   </select>
                   <span className="text-sm text-gray-500 dark:text-gray-400">
                     Balance: 1.23 {getChainInfo(toChain)?.symbol}
                   </span>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Recipient Address
@@ -287,17 +350,27 @@ const Bridge: React.FC = () => {
             {/* Bridge Info */}
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
               <div className="flex items-center justify-between text-sm mb-2">
-                <span className="text-gray-600 dark:text-gray-400">Estimated time:</span>
-                <span className="font-medium text-gray-900 dark:text-white">~15 minutes</span>
+                <span className="text-gray-600 dark:text-gray-400">
+                  Estimated time:
+                </span>
+                <span className="font-medium text-gray-900 dark:text-white">
+                  ~15 minutes
+                </span>
               </div>
               <div className="flex items-center justify-between text-sm mb-2">
-                <span className="text-gray-600 dark:text-gray-400">Bridge fee:</span>
-                <span className="font-medium text-gray-900 dark:text-white">0.001 ETH</span>
+                <span className="text-gray-600 dark:text-gray-400">
+                  Bridge fee:
+                </span>
+                <span className="font-medium text-gray-900 dark:text-white">
+                  0.001 ETH
+                </span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">You will receive:</span>
+                <span className="text-gray-600 dark:text-gray-400">
+                  You will receive:
+                </span>
                 <span className="font-medium text-gray-900 dark:text-white">
-                  {formData.amount || '0.0'} tokens
+                  {formData.amount || "0.0"} tokens
                 </span>
               </div>
             </div>
@@ -305,7 +378,12 @@ const Bridge: React.FC = () => {
             {/* Transfer Button */}
             <button
               type="submit"
-              disabled={loading || !formData.recipient || !formData.propertyId || !formData.amount}
+              disabled={
+                loading ||
+                !formData.recipient ||
+                !formData.propertyId ||
+                !formData.amount
+              }
               className="w-full bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 disabled:from-gray-400 disabled:to-gray-500 text-white py-4 rounded-lg font-semibold text-lg transition-all duration-200 flex items-center justify-center space-x-2 disabled:cursor-not-allowed"
             >
               {loading ? (
@@ -313,7 +391,7 @@ const Bridge: React.FC = () => {
               ) : (
                 <ArrowLeftRight className="w-5 h-5" />
               )}
-              <span>{loading ? 'Transferring...' : 'Transfer'}</span>
+              <span>{loading ? "Transferring..." : "Transfer"}</span>
             </button>
           </form>
         </motion.div>
@@ -333,16 +411,21 @@ const Bridge: React.FC = () => {
               <RefreshCw className="w-4 h-4" />
             </button>
           </div>
-          
+
           <div className="space-y-4">
             {transfers.length === 0 ? (
               <div className="text-center py-8">
                 <ArrowLeftRight className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 dark:text-gray-400">No transfers yet</p>
+                <p className="text-gray-600 dark:text-gray-400">
+                  No transfers yet
+                </p>
               </div>
             ) : (
               transfers.slice(0, 5).map((transfer) => (
-                <div key={transfer.id} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                <div
+                  key={transfer.id}
+                  className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4"
+                >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-2">
                       {getStatusIcon(transfer.status)}
@@ -354,16 +437,17 @@ const Bridge: React.FC = () => {
                       {new Date(transfer.timestamp).toLocaleDateString()}
                     </span>
                   </div>
-                  
+
                   <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400 mb-2">
                     <span>{getChainInfo(fromChain)?.name}</span>
                     <ArrowLeftRight className="w-3 h-3" />
                     <span>{transfer.destinationChain}</span>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <div className="text-xs font-mono text-gray-500 dark:text-gray-400">
-                      {transfer.txHash.slice(0, 10)}...{transfer.txHash.slice(-8)}
+                      {transfer.txHash.slice(0, 10)}...
+                      {transfer.txHash.slice(-8)}
                     </div>
                     <button className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 flex items-center space-x-1">
                       <ExternalLink className="w-3 h-3" />
