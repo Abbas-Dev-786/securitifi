@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Building2,
@@ -13,6 +13,7 @@ import {
   Award,
   BarChart3,
 } from "lucide-react";
+import { useAppKit } from "@reown/appkit/react";
 
 const features = [
   {
@@ -97,11 +98,16 @@ const testimonials = [
 ];
 
 const Landing: React.FC = () => {
-  const { connectWallet, wallet } = {
-    connectWallet: () => {},
-    wallet: {
-      isConnecting: false,
-    },
+  const { open } = useAppKit();
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  const handleConnectWallet = async () => {
+    setIsConnecting(true);
+    try {
+      await open();
+    } finally {
+      setIsConnecting(false);
+    }
   };
 
   return (
@@ -153,13 +159,11 @@ const Landing: React.FC = () => {
               </a>
             </div>
             <button
-              onClick={connectWallet}
-              disabled={wallet.isConnecting}
+              onClick={handleConnectWallet}
+              disabled={isConnecting}
               className="bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 flex items-center space-x-2"
             >
-              <span>
-                {wallet.isConnecting ? "Connecting..." : "Launch App"}
-              </span>
+              <span>{isConnecting ? "Connecting..." : "Launch App"}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </motion.div>
@@ -205,12 +209,12 @@ const Landing: React.FC = () => {
 
               <div className="flex flex-col sm:flex-row gap-4 mb-8">
                 <button
-                  onClick={connectWallet}
-                  disabled={wallet.isConnecting}
+                  onClick={handleConnectWallet}
+                  disabled={isConnecting}
                   className="bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 shadow-xl hover:shadow-2xl disabled:opacity-50 flex items-center justify-center space-x-2"
                 >
                   <span>
-                    {wallet.isConnecting ? "Connecting..." : "Start Investing"}
+                    {isConnecting ? "Connecting..." : "Start Investing"}
                   </span>
                   <ArrowRight className="w-5 h-5" />
                 </button>
@@ -481,12 +485,12 @@ const Landing: React.FC = () => {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
-                onClick={connectWallet}
-                disabled={wallet.isConnecting}
+                onClick={handleConnectWallet}
+                disabled={isConnecting}
                 className="bg-white text-primary-600 hover:bg-gray-50 px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 shadow-xl hover:shadow-2xl disabled:opacity-50 flex items-center justify-center space-x-2"
               >
                 <span>
-                  {wallet.isConnecting ? "Connecting..." : "Start Your Journey"}
+                  {isConnecting ? "Connecting..." : "Start Your Journey"}
                 </span>
                 <ArrowRight className="w-5 h-5" />
               </button>
