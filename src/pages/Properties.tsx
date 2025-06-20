@@ -13,48 +13,58 @@ import {
 } from "lucide-react";
 import PropertyForm from "../components/property/PropertyForm";
 import { formatEther } from "ethers";
+import { useReadContract } from "wagmi";
+import { readContract } from "wagmi/actions";
+import { PROPERTY_MANAGER_CONTRACT_ADDRESS } from "../constants";
+import propertyManagerJson from "./../abis/PropertyManager.json";
+import { config } from "../config";
+
+type Property = {
+  id: number;
+  propertyAddress: string;
+  isVerified: boolean;
+  owner: string;
+  propertyValue: string;
+  metadataURI: string;
+  createdAt?: Date;
+};
 
 const Properties: React.FC = () => {
-  const { properties, fetchUserProperties, verifyProperty, loading } = {
-    properties: [
-      {
-        id: 1,
-        propertyAddress: "0x1234...5678",
-        isVerified: true,
-        owner: "0x1234...5678",
-        propertyValue: "1000000000000000000",
-        metadataURI: "https://example.com",
-        createdAt: new Date(),
-      },
-      {
-        id: 2,
-        propertyAddress: "0xabcd...efgh",
-        isVerified: false,
-        owner: "0xabcd...efgh",
-        propertyValue: "2000000000000000000",
-        metadataURI: "https://example.com",
-        createdAt: new Date(),
-      },
-    ],
-    fetchUserProperties: () => {
-      console.log("Fetching user properties");
-    },
-    verifyProperty: (id: number) => {
-      console.log("Verifying property", id);
-    },
-    loading: false,
-  };
+  const [properties, setProperties] = useState<Property[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
 
+  // get property count
+  const { data: propertyCount, isLoading } = useReadContract({
+    abi: propertyManagerJson.abi,
+    address: PROPERTY_MANAGER_CONTRACT_ADDRESS,
+    functionName: "propertyCount",
+  });
+
+  // Fetch properties
   useEffect(() => {
-    fetchUserProperties();
-  }, [fetchUserProperties]);
+    if (propertyCount) {
+      const fetchProperties = async () => {
+        const props = [];
+        for (let i = 1; i <= Number(propertyCount); i++) {
+          const data = await readContract(config, {
+            address: PROPERTY_MANAGER_CONTRACT_ADDRESS,
+            abi: propertyManagerJson.abi,
+            functionName: "getPropertyDetails",
+            args: [i],
+          });
+          props.push({ id: i, ...(data as Property) });
+        }
+        setProperties(props);
+      };
+      fetchProperties();
+    }
+  }, [propertyCount]);
 
   const filteredProperties = properties.filter((property) => {
-    const matchesSearch = property.propertyAddress
+    const matchesSearch = property?.propertyAddress
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
     const matchesFilter =
@@ -67,7 +77,8 @@ const Properties: React.FC = () => {
 
   const handleVerifyProperty = async (tokenId: number) => {
     try {
-      await verifyProperty(tokenId);
+      console.log(tokenId);
+      // await verifyProperty(tokenId);
     } catch (error) {
       console.error("Failed to verify property:", error);
     }
@@ -132,7 +143,7 @@ const Properties: React.FC = () => {
       </motion.div>
 
       {/* Properties Grid */}
-      {loading ? (
+      {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
             <div
@@ -236,7 +247,7 @@ const Properties: React.FC = () => {
                 {!property.isVerified && (
                   <button
                     onClick={() => handleVerifyProperty(property.id)}
-                    disabled={loading}
+                    disabled={isLoading}
                     className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white py-2 px-4 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 flex items-center justify-center space-x-2"
                   >
                     <Shield className="w-4 h-4" />
@@ -255,7 +266,7 @@ const Properties: React.FC = () => {
           onClose={() => setShowForm(false)}
           onSuccess={() => {
             setShowForm(false);
-            fetchUserProperties();
+            // fetchUserProperties();
           }}
         />
       )}
