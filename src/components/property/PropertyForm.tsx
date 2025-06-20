@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   X,
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { PropertyFormData } from "../../types";
 import { usePropertyManager } from "../../hooks/usePropertyManager";
+import { toast } from "react-toastify";
 
 interface PropertyFormProps {
   onClose: () => void;
@@ -19,7 +20,8 @@ interface PropertyFormProps {
 }
 
 const PropertyForm: React.FC<PropertyFormProps> = ({ onClose, onSuccess }) => {
-  const { createProperty, loading } = usePropertyManager();
+  const { submitProperty, isConnected, isOwner, loading, error } =
+    usePropertyManager();
   const [formData, setFormData] = useState<PropertyFormData>({
     propertyAddress: "",
     propertyValue: "",
@@ -31,21 +33,53 @@ const PropertyForm: React.FC<PropertyFormProps> = ({ onClose, onSuccess }) => {
     squareFootage: 1500,
   });
 
+  // Mock IPFS upload function (replace with actual IPFS service like Pinata)
+  const uploadToIPFS = async (data: PropertyFormData): Promise<string> => {
+    // Simulate IPFS upload
+    // In production, use Pinata, Infura, or another IPFS service
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate network delay
+    const metadata = JSON.stringify(data);
+    // Mock IPFS CID (replace with real IPFS upload)
+    const cid = `ipfs://mock-cid-${Date.now()}`;
+    console.log("Uploaded metadata to IPFS:", metadata, "CID:", cid);
+    return cid;
+  };
+
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isConnected) {
+      toast.error("Please connect your wallet");
+      return;
+    }
+
+    if (!isOwner) {
+      toast.error("Only the contract owner can submit properties");
+      return;
+    }
+    if (!formData.propertyAddress || !formData.propertyValue) {
+      toast.error("Property address and value are required");
+      return;
+    }
+    if (parseFloat(formData.propertyValue) <= 0) {
+      toast.error("Property value must be greater than 0");
+      return;
+    }
+
     try {
-      await createProperty(
-        formData.propertyAddress,
-        formData.propertyValue,
-        formData.description,
-        formData.imageUrl
-      );
+      // Upload form data to IPFS
+      const metadataURI = await uploadToIPFS(formData);
+      // Submit property to the contract
+      await submitProperty(metadataURI, formData.propertyValue);
+      toast.success("Property tokenized successfully");
       onSuccess();
-    } catch (error) {
-      console.error("Failed to create property:", error);
+    } catch (err: any) {
+      toast.error(`Failed to tokenize property: ${err.message}`);
+      console.error("Failed to create property:", err);
     }
   };
 
+  // Handle input changes
   const handleInputChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
@@ -60,6 +94,43 @@ const PropertyForm: React.FC<PropertyFormProps> = ({ onClose, onSuccess }) => {
           : value,
     }));
   };
+
+  // Show error toast when error changes
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
+  // Render connection/network prompts
+  if (!isConnected) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+      >
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full"
+        >
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+            Connect Wallet
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400">
+            Please connect your wallet to tokenize a property.
+          </p>
+          <button
+            onClick={onClose}
+            className="mt-4 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            Close
+          </button>
+        </motion.div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -120,7 +191,7 @@ const PropertyForm: React.FC<PropertyFormProps> = ({ onClose, onSuccess }) => {
                 onChange={handleInputChange}
                 required
                 step="0.01"
-                min="0"
+                min="0.01"
                 placeholder="1.5"
                 className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
               />
@@ -242,13 +313,14 @@ const PropertyForm: React.FC<PropertyFormProps> = ({ onClose, onSuccess }) => {
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              disabled={loading}
+              className="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !isOwner}
               className="px-6 py-3 bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "Tokenizing..." : "Tokenize Property"}

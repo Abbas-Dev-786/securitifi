@@ -97,10 +97,10 @@ const RentDistribution: React.FC = () => {
     },
   ];
 
-  useEffect(() => {
-    // Check if user is owner (mock implementation)
-    setIsOwner(wallet.address === "0x1234567890123456789012345678901234567890");
-  }, [wallet.address]);
+  // useEffect(() => {
+  //   // Check if user is owner (mock implementation)
+  //   setIsOwner(wallet.address === "0x1234567890123456789012345678901234567890");
+  // }, [wallet.address]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

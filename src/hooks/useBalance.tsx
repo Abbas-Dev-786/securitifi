@@ -6,11 +6,11 @@ const useBalance = () => {
   const [balance, setBalance] = useState<any>();
   const { isConnected } = useAppKitAccount();
 
-  useEffect(() => {
-    if (isConnected) {
-      fetchBalance().then((x) => setBalance(x.data));
-    }
-  }, [isConnected, fetchBalance]);
+  // useEffect(() => {
+  //   if (isConnected) {
+  //     fetchBalance().then((x) => setBalance(x.data));
+  //   }
+  // }, [isConnected, fetchBalance]);
 
   return balance;
 };

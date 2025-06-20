@@ -13,85 +13,146 @@ import {
 } from "lucide-react";
 import PropertyForm from "../components/property/PropertyForm";
 import { formatEther } from "viem";
-import { useAppKitAccount } from "@reown/appkit/react";
+// import { useAppKitAccount } from "@reown/appkit/react";
 import { usePropertyManager } from "../hooks/usePropertyManager";
-
-type Property = {
-  id: number;
-  propertyAddress: string;
-  isVerified: boolean;
-  owner: string;
-  propertyValue: string;
-  metadataURI: string;
-  createdAt?: Date;
-};
+import { toast } from "react-toastify"; // For user feedback
 
 const Properties: React.FC = () => {
-  const { address } = useAppKitAccount();
-  const { 
-    propertyCount, 
-    getPropertyDetails, 
-    verifyProperty, 
-    getUserProperties,
+  // const { address } = useAppKitAccount();
+  const {
+    isConnected,
+    // isCorrectNetwork,
+    isOwner,
+    properties,
+    // submitProperty,
+    verifyProperty,
+    storeMetadata,
+    getPropertyDetails,
     loading,
-    refetchPropertyCount 
+    error,
   } = usePropertyManager();
-  
-  const [properties, setProperties] = useState<Property[]>([]);
+
   const [showForm, setShowForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterStatus, setFilterStatus] = useState<
+    "all" | "verified" | "unverified"
+  >("all");
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [editPropertyId, setEditPropertyId] = useState<number | null>(null);
+  const [editMetadataURI, setEditMetadataURI] = useState("");
+  const [subscriptionId, setSubscriptionId] = useState("1"); // Default Chainlink subscription ID
 
-  // Fetch properties
+  // Show error toast when error changes
   useEffect(() => {
-    const fetchProperties = async () => {
-      if (propertyCount > 0) {
-        setIsLoading(true);
-        const props = [];
-        for (let i = 1; i <= propertyCount; i++) {
-          const data = await getPropertyDetails(i);
-          if (data) {
-            props.push({ id: i, ...data });
-          }
-        }
-        setProperties(props);
-        setIsLoading(false);
-      } else {
-        setIsLoading(false);
-      }
-    };
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
 
-    fetchProperties();
-  }, [propertyCount, getPropertyDetails]);
-
+  // Filter properties
   const filteredProperties = properties.filter((property) => {
-    const matchesSearch = property?.propertyAddress
+    const matchesSearch = property.id
+      .toString()
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
+
     const matchesFilter =
       filterStatus === "all" ||
-      (filterStatus === "verified" && property.isVerified) ||
-      (filterStatus === "unverified" && !property.isVerified);
+      (filterStatus === "verified" && property.verified) ||
+      (filterStatus === "unverified" && !property.verified);
 
     return matchesSearch && matchesFilter;
   });
 
-  const handleVerifyProperty = async (tokenId: number) => {
+  // Handle property submission
+  // const handleSubmitProperty = async (
+  //   metadataURI: string,
+  //   initialValue: string
+  // ) => {
+  //   if (!isOwner) {
+  //     toast.error("Only the contract owner can submit properties");
+  //     return;
+  //   }
+  //   try {
+  //     await submitProperty(metadataURI, initialValue);
+  //     toast.success("Property submitted successfully");
+  //     setShowForm(false);
+  //   } catch (err: any) {
+  //     toast.error(`Failed to submit property: ${err.message}`);
+  //   }
+  // };
+
+  // Handle property verification
+  const handleVerifyProperty = async (propertyId: number) => {
+    if (!isOwner) {
+      toast.error("Only the contract owner can verify properties");
+      return;
+    }
+    if (!subscriptionId) {
+      toast.error("Please provide a valid Chainlink subscription ID");
+      return;
+    }
     try {
-      await verifyProperty(tokenId);
-      // Refresh properties after verification
-      refetchPropertyCount();
-    } catch (error) {
-      console.error("Failed to verify property:", error);
+      await verifyProperty(propertyId.toString(), subscriptionId);
+      toast.success("Verification requested successfully");
+    } catch (err: any) {
+      toast.error(`Failed to verify property: ${err.message}`);
     }
   };
 
+  // Handle metadata update
+  const handleUpdateMetadata = async () => {
+    if (!isOwner) {
+      toast.error("Only the contract owner can update metadata");
+      return;
+    }
+    if (!editPropertyId || !editMetadataURI) {
+      toast.error("Please provide a property ID and metadata URI");
+      return;
+    }
+    try {
+      await storeMetadata(editPropertyId.toString(), editMetadataURI);
+      toast.success("Metadata updated successfully");
+      setShowEditForm(false);
+      setEditPropertyId(null);
+      setEditMetadataURI("");
+      // Refresh selected property details
+      if (selectedProperty?.id === editPropertyId) {
+        const updatedProperty = await getPropertyDetails(
+          editPropertyId.toString()
+        );
+        setSelectedProperty(updatedProperty);
+      }
+    } catch (err: any) {
+      toast.error(`Failed to update metadata: ${err.message}`);
+    }
+  };
+
+  // Handle form success
   const handleFormSuccess = () => {
     setShowForm(false);
-    refetchPropertyCount();
   };
+
+  // Render connection/network prompts
+  if (!isConnected) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="text-center py-12"
+      >
+        <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl p-12 border border-gray-200 dark:border-gray-700 shadow-lg">
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            Connect Wallet
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400">
+            Please connect your wallet to view and manage properties.
+          </p>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -109,13 +170,15 @@ const Properties: React.FC = () => {
             Manage your tokenized real estate portfolio
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="mt-4 md:mt-0 bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Tokenize Property</span>
-        </button>
+        {isOwner && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="mt-4 md:mt-0 bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Tokenize Property</span>
+          </button>
+        )}
       </motion.div>
 
       {/* Search and Filter */}
@@ -130,7 +193,7 @@ const Properties: React.FC = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
-              placeholder="Search properties by address..."
+              placeholder="Search properties by ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
@@ -140,7 +203,11 @@ const Properties: React.FC = () => {
             <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
+              onChange={(e) =>
+                setFilterStatus(
+                  e.target.value as "all" | "verified" | "unverified"
+                )
+              }
               className="pl-10 pr-8 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none appearance-none cursor-pointer"
             >
               <option value="all">All Properties</option>
@@ -152,7 +219,7 @@ const Properties: React.FC = () => {
       </motion.div>
 
       {/* Properties Grid */}
-      {isLoading ? (
+      {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
             <div
@@ -183,7 +250,7 @@ const Properties: React.FC = () => {
                 ? "Try adjusting your search or filter criteria"
                 : "Get started by tokenizing your first property"}
             </p>
-            {!searchTerm && filterStatus === "all" && (
+            {isOwner && !searchTerm && filterStatus === "all" && (
               <button
                 onClick={() => setShowForm(true)}
                 className="bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-200"
@@ -208,18 +275,20 @@ const Properties: React.FC = () => {
                   {property.metadataURI ? (
                     <img
                       src={property.metadataURI}
-                      alt={property.propertyAddress}
+                      alt={`Property #${property.id}`}
                       className="w-full h-full object-cover"
                       onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        e.currentTarget.style.display = "none";
+                        e.currentTarget.nextElementSibling?.classList.remove(
+                          "hidden"
+                        );
                       }}
                     />
                   ) : null}
                   <MapPin className="w-12 h-12 text-primary-500 hidden" />
                 </div>
                 <div className="absolute top-4 right-4">
-                  {property.isVerified ? (
+                  {property.verified ? (
                     <div className="bg-green-500 text-white px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1">
                       <Check className="w-3 h-3" />
                       <span>Verified</span>
@@ -245,34 +314,53 @@ const Properties: React.FC = () => {
                     >
                       <Eye className="w-4 h-4" />
                     </button>
-                    <button className="p-2 text-gray-500 hover:text-primary-500 transition-colors">
-                      <Edit className="w-4 h-4" />
-                    </button>
+                    {isOwner && (
+                      <button
+                        onClick={() => {
+                          setEditPropertyId(property.id);
+                          setEditMetadataURI(property.metadataURI);
+                          setShowEditForm(true);
+                        }}
+                        className="p-2 text-gray-500 hover:text-primary-500 transition-colors"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 <div className="space-y-2 mb-4">
                   <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
                     <MapPin className="w-4 h-4 mr-2" />
-                    <span className="truncate">{property.propertyAddress}</span>
+                    <span className="truncate">Property #{property.id}</span>
                   </div>
                   <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {property.propertyValue ? 
-                      `$${parseFloat(formatEther(BigInt(property.propertyValue))).toLocaleString()}` :
-                      'N/A'
-                    }
+                    {property.initialValue
+                      ? `$${parseFloat(
+                          formatEther(property.initialValue)
+                        ).toLocaleString()}`
+                      : "N/A"}
                   </div>
                 </div>
 
-                {!property.isVerified && (
-                  <button
-                    onClick={() => handleVerifyProperty(property.id)}
-                    disabled={loading}
-                    className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white py-2 px-4 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 flex items-center justify-center space-x-2"
-                  >
-                    <Shield className="w-4 h-4" />
-                    <span>Request Verification</span>
-                  </button>
+                {isOwner && !property.verified && (
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="text"
+                      placeholder="Chainlink Subscription ID"
+                      value={subscriptionId}
+                      onChange={(e) => setSubscriptionId(e.target.value)}
+                      className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                    />
+                    <button
+                      onClick={() => handleVerifyProperty(property.id)}
+                      disabled={loading || !subscriptionId}
+                      className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white py-2 px-4 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 flex items-center justify-center space-x-2"
+                    >
+                      <Shield className="w-4 h-4" />
+                      <span>Request Verification</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </motion.div>
@@ -284,8 +372,67 @@ const Properties: React.FC = () => {
       {showForm && (
         <PropertyForm
           onClose={() => setShowForm(false)}
+          // onSubmit={handleSubmitProperty}
           onSuccess={handleFormSuccess}
         />
+      )}
+
+      {/* Edit Metadata Modal */}
+      {showEditForm && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowEditForm(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Update Property Metadata
+              </h2>
+              <button
+                onClick={() => setShowEditForm(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-gray-600 dark:text-gray-400">
+                  Property ID
+                </label>
+                <p className="font-semibold text-gray-900 dark:text-white">
+                  #{editPropertyId}
+                </p>
+              </div>
+              <div>
+                <label className="text-sm text-gray-600 dark:text-gray-400">
+                  Metadata URI
+                </label>
+                <input
+                  type="text"
+                  value={editMetadataURI}
+                  onChange={(e) => setEditMetadataURI(e.target.value)}
+                  placeholder="ipfs://..."
+                  className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                />
+              </div>
+              <button
+                onClick={handleUpdateMetadata}
+                disabled={loading || !editMetadataURI}
+                className="w-full bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white py-2 px-4 rounded-lg font-medium transition-all duration-200 disabled:opacity-50"
+              >
+                Update Metadata
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
       )}
 
       {/* Property Details Modal */}
@@ -318,7 +465,7 @@ const Properties: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-gray-600 dark:text-gray-400">
-                    Token ID
+                    Property ID
                   </label>
                   <p className="font-semibold text-gray-900 dark:text-white">
                     #{selectedProperty.id}
@@ -330,12 +477,12 @@ const Properties: React.FC = () => {
                   </label>
                   <p
                     className={`font-semibold ${
-                      selectedProperty.isVerified
+                      selectedProperty.verified
                         ? "text-green-500"
                         : "text-yellow-500"
                     }`}
                   >
-                    {selectedProperty.isVerified
+                    {selectedProperty.verified
                       ? "Verified"
                       : "Pending Verification"}
                   </p>
@@ -344,10 +491,10 @@ const Properties: React.FC = () => {
 
               <div>
                 <label className="text-sm text-gray-600 dark:text-gray-400">
-                  Property Address
+                  Metadata URI
                 </label>
-                <p className="font-semibold text-gray-900 dark:text-white">
-                  {selectedProperty.propertyAddress}
+                <p className="font-semibold text-gray-900 dark:text-white break-all">
+                  {selectedProperty.metadataURI || "N/A"}
                 </p>
               </div>
 
@@ -356,19 +503,22 @@ const Properties: React.FC = () => {
                   Property Value
                 </label>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {selectedProperty.propertyValue ? 
-                    `$${parseFloat(formatEther(BigInt(selectedProperty.propertyValue))).toLocaleString()}` :
-                    'N/A'
-                  }
+                  {selectedProperty.initialValue
+                    ? `$${parseFloat(
+                        formatEther(selectedProperty.initialValue)
+                      ).toLocaleString()}`
+                    : "N/A"}
                 </p>
               </div>
 
               <div>
                 <label className="text-sm text-gray-600 dark:text-gray-400">
-                  Owner
+                  Initial Index
                 </label>
-                <p className="font-mono text-sm text-gray-900 dark:text-white break-all">
-                  {selectedProperty.owner}
+                <p className="font-semibold text-gray-900 dark:text-white">
+                  {selectedProperty.initialIndex
+                    ? formatEther(selectedProperty.initialIndex)
+                    : "N/A"}
                 </p>
               </div>
             </div>
