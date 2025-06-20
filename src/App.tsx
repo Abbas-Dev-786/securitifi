@@ -17,6 +17,7 @@ import Landing from "./pages/Landing";
 import "react-toastify/dist/ReactToastify.css";
 import { useAppKitAccount } from "@reown/appkit/react";
 
+//
 const AppContent: React.FC = () => {
   const { isConnected } = useAppKitAccount();
 
