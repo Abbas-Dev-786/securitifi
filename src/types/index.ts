@@ -66,7 +66,7 @@ export interface LoanFormData {
 
 export interface TransactionStatus {
   hash: string;
-  status: 'pending' | 'confirmed' | 'failed';
+  status: "pending" | "confirmed" | "failed";
   confirmations: number;
   timestamp: number;
 }

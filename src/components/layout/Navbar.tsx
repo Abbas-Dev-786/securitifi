@@ -1,26 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Bell, Search, Moon, Sun, User, Settings } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
 import { formatAddress } from "../../utils/helpers";
 import { formatEther } from "ethers";
-import {
-  useAppKitAccount,
-  useAppKitBalance,
-  useDisconnect,
-} from "@reown/appkit/react";
+import { useAppKitAccount, useDisconnect } from "@reown/appkit/react";
+import { useBalance } from "wagmi";
 
 const Navbar: React.FC = () => {
-  const [balance, setBalance] = useState<any>(undefined);
-  const { fetchBalance } = useAppKitBalance();
-  const { address, isConnected } = useAppKitAccount();
+  const balance = useBalance();
+  const { address } = useAppKitAccount();
   const { disconnect } = useDisconnect();
   const { isDark, toggleTheme } = useTheme();
-
-  useEffect(() => {
-    if (isConnected) {
-      fetchBalance().then(setBalance);
-    }
-  }, [isConnected, fetchBalance]);
 
   return (
     <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 px-6 py-4">
@@ -62,7 +52,10 @@ const Navbar: React.FC = () => {
                 {formatAddress(address || "")}
               </span>
               <span className="text-xs text-gray-500 dark:text-gray-400">
-                {parseFloat(formatEther(balance || "0")).toFixed(4)} ETH
+                {parseFloat(formatEther(balance?.data?.value || "0")).toFixed(
+                  4
+                )}{" "}
+                ETH
               </span>
             </div>
             <button

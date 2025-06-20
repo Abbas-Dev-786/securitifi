@@ -32,7 +32,8 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { useAppKitAccount, useAppKitBalance } from "@reown/appkit/react";
+import { useAppKitAccount } from "@reown/appkit/react";
+import useBalance from "../hooks/useBalance";
 
 const mockChartData = [
   { month: "Jan", value: 12000, loans: 8, properties: 15, volume: 45000 },
@@ -51,8 +52,7 @@ const portfolioAllocation = [
 ];
 
 const Dashboard: React.FC = () => {
-  const [balance, setBalance] = useState<any>(undefined);
-  const { fetchBalance } = useAppKitBalance();
+  const balance = useBalance();
   const { isConnected } = useAppKitAccount();
   const { properties, fetchUserProperties } = {
     properties: [],
@@ -70,12 +70,6 @@ const Dashboard: React.FC = () => {
       fetchUserProperties();
     }
   }, [isConnected, fetchUserProperties]);
-
-  useEffect(() => {
-    if (isConnected) {
-      fetchBalance().then(setBalance);
-    }
-  }, [isConnected, fetchBalance]);
 
   const statsCards = [
     {
@@ -206,7 +200,10 @@ const Dashboard: React.FC = () => {
                 Balance:
               </span>
               <span className="font-semibold text-gray-900 dark:text-white">
-                {parseFloat(formatEther(balance || "0")).toFixed(4)} ETH
+                {parseFloat(formatEther(balance?.data?.value || "0")).toFixed(
+                  4
+                )}{" "}
+                ETH
               </span>
             </div>
           </div>
