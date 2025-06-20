@@ -12,12 +12,9 @@ import {
   X,
 } from "lucide-react";
 import PropertyForm from "../components/property/PropertyForm";
-import { formatEther } from "ethers";
-import { useReadContract } from "wagmi";
-import { readContract } from "wagmi/actions";
-import { PROPERTY_MANAGER_CONTRACT_ADDRESS } from "../constants";
-import propertyManagerJson from "./../abis/PropertyManager.json";
-import { config } from "../config";
+import { formatEther } from "viem";
+import { useAppKitAccount } from "@reown/appkit/react";
+import { usePropertyManager } from "../hooks/usePropertyManager";
 
 type Property = {
   id: number;
@@ -30,38 +27,44 @@ type Property = {
 };
 
 const Properties: React.FC = () => {
+  const { address } = useAppKitAccount();
+  const { 
+    propertyCount, 
+    getPropertyDetails, 
+    verifyProperty, 
+    getUserProperties,
+    loading,
+    refetchPropertyCount 
+  } = usePropertyManager();
+  
   const [properties, setProperties] = useState<Property[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
-
-  // get property count
-  const { data: propertyCount, isLoading } = useReadContract({
-    abi: propertyManagerJson.abi,
-    address: PROPERTY_MANAGER_CONTRACT_ADDRESS,
-    functionName: "propertyCount",
-  });
+  const [isLoading, setIsLoading] = useState(true);
 
   // Fetch properties
   useEffect(() => {
-    if (propertyCount) {
-      const fetchProperties = async () => {
+    const fetchProperties = async () => {
+      if (propertyCount > 0) {
+        setIsLoading(true);
         const props = [];
-        for (let i = 1; i <= Number(propertyCount); i++) {
-          const data = await readContract(config, {
-            address: PROPERTY_MANAGER_CONTRACT_ADDRESS,
-            abi: propertyManagerJson.abi,
-            functionName: "getPropertyDetails",
-            args: [i],
-          });
-          props.push({ id: i, ...(data as Property) });
+        for (let i = 1; i <= propertyCount; i++) {
+          const data = await getPropertyDetails(i);
+          if (data) {
+            props.push({ id: i, ...data });
+          }
         }
         setProperties(props);
-      };
-      fetchProperties();
-    }
-  }, [propertyCount]);
+        setIsLoading(false);
+      } else {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProperties();
+  }, [propertyCount, getPropertyDetails]);
 
   const filteredProperties = properties.filter((property) => {
     const matchesSearch = property?.propertyAddress
@@ -77,11 +80,17 @@ const Properties: React.FC = () => {
 
   const handleVerifyProperty = async (tokenId: number) => {
     try {
-      console.log(tokenId);
-      // await verifyProperty(tokenId);
+      await verifyProperty(tokenId);
+      // Refresh properties after verification
+      refetchPropertyCount();
     } catch (error) {
       console.error("Failed to verify property:", error);
     }
+  };
+
+  const handleFormSuccess = () => {
+    setShowForm(false);
+    refetchPropertyCount();
   };
 
   return (
@@ -196,7 +205,18 @@ const Properties: React.FC = () => {
             >
               <div className="relative">
                 <div className="w-full h-48 bg-gradient-to-br from-primary-100 to-secondary-100 dark:from-primary-900/20 dark:to-secondary-900/20 flex items-center justify-center">
-                  <MapPin className="w-12 h-12 text-primary-500" />
+                  {property.metadataURI ? (
+                    <img
+                      src={property.metadataURI}
+                      alt={property.propertyAddress}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : null}
+                  <MapPin className="w-12 h-12 text-primary-500 hidden" />
                 </div>
                 <div className="absolute top-4 right-4">
                   {property.isVerified ? (
@@ -237,17 +257,17 @@ const Properties: React.FC = () => {
                     <span className="truncate">{property.propertyAddress}</span>
                   </div>
                   <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    $
-                    {parseFloat(
-                      formatEther(property.propertyValue)
-                    ).toLocaleString()}
+                    {property.propertyValue ? 
+                      `$${parseFloat(formatEther(BigInt(property.propertyValue))).toLocaleString()}` :
+                      'N/A'
+                    }
                   </div>
                 </div>
 
                 {!property.isVerified && (
                   <button
                     onClick={() => handleVerifyProperty(property.id)}
-                    disabled={isLoading}
+                    disabled={loading}
                     className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white py-2 px-4 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 flex items-center justify-center space-x-2"
                   >
                     <Shield className="w-4 h-4" />
@@ -264,10 +284,7 @@ const Properties: React.FC = () => {
       {showForm && (
         <PropertyForm
           onClose={() => setShowForm(false)}
-          onSuccess={() => {
-            setShowForm(false);
-            // fetchUserProperties();
-          }}
+          onSuccess={handleFormSuccess}
         />
       )}
 
@@ -339,10 +356,10 @@ const Properties: React.FC = () => {
                   Property Value
                 </label>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  $
-                  {parseFloat(
-                    formatEther(selectedProperty.propertyValue)
-                  ).toLocaleString()}
+                  {selectedProperty.propertyValue ? 
+                    `$${parseFloat(formatEther(BigInt(selectedProperty.propertyValue))).toLocaleString()}` :
+                    'N/A'
+                  }
                 </p>
               </div>
 

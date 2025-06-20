@@ -11,6 +11,7 @@ import {
   Square,
 } from "lucide-react";
 import { PropertyFormData } from "../../types";
+import { usePropertyManager } from "../../hooks/usePropertyManager";
 
 interface PropertyFormProps {
   onClose: () => void;
@@ -18,12 +19,7 @@ interface PropertyFormProps {
 }
 
 const PropertyForm: React.FC<PropertyFormProps> = ({ onClose, onSuccess }) => {
-  const { mintProperty, loading } = {
-    mintProperty: (data: PropertyFormData) => {
-      console.log(data);
-    },
-    loading: false,
-  };
+  const { createProperty, loading } = usePropertyManager();
   const [formData, setFormData] = useState<PropertyFormData>({
     propertyAddress: "",
     propertyValue: "",
@@ -38,10 +34,15 @@ const PropertyForm: React.FC<PropertyFormProps> = ({ onClose, onSuccess }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await mintProperty(formData);
+      await createProperty(
+        formData.propertyAddress,
+        formData.propertyValue,
+        formData.description,
+        formData.imageUrl
+      );
       onSuccess();
     } catch (error) {
-      console.error("Failed to mint property:", error);
+      console.error("Failed to create property:", error);
     }
   };
 
