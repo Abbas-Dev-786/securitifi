@@ -1,6 +1,8 @@
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 import { sepolia } from "@reown/appkit/networks";
 import type { AppKitNetwork } from "@reown/appkit/networks";
+import { cookieStorage, createStorage } from "wagmi";
+import type { Chain } from "viem";
 
 // Get projectId from https://cloud.reown.com
 export const projectId = import.meta.env.VITE_PROJECT_ID || "c7641d4aea58d4c5b4e893a0b89461b5"; // this is a public projectId only to use on localhost
@@ -23,6 +25,10 @@ export const networks = [sepolia] as [AppKitNetwork, ...AppKitNetwork[]];
 export const wagmiAdapter = new WagmiAdapter({
   projectId,
   networks,
+  storage: createStorage({
+    storage: cookieStorage,
+  }),
+  ssr: true,
 });
 
 export const config = wagmiAdapter.wagmiConfig;
