@@ -41,7 +41,7 @@ const Properties: React.FC = () => {
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
   const [editPropertyId, setEditPropertyId] = useState<number | null>(null);
   const [editMetadataURI, setEditMetadataURI] = useState("");
-  const [subscriptionId, setSubscriptionId] = useState("1"); // Default Chainlink subscription ID
+  const [subscriptionId, setSubscriptionId] = useState("5054"); // Default Chainlink subscription ID
 
   // Show error toast when error changes
   useEffect(() => {
