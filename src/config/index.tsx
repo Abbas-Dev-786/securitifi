@@ -3,7 +3,7 @@ import { sepolia } from "@reown/appkit/networks";
 import type { AppKitNetwork } from "@reown/appkit/networks";
 
 // Get projectId from https://cloud.reown.com
-export const projectId = import.meta.env.VITE_PROJECT_ID; // this is a public projectId only to use on localhost
+export const projectId = import.meta.env.VITE_PROJECT_ID || "c7641d4aea58d4c5b4e893a0b89461b5"; // this is a public projectId only to use on localhost
 
 if (!projectId) {
   throw new Error("Project ID is not defined");
