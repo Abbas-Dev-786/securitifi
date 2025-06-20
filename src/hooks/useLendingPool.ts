@@ -1,161 +1,107 @@
-import { useState } from 'react';
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { readContract as wagmiReadContract } from 'wagmi/actions';
-import { parseEther, formatEther } from 'viem';
-import { toast } from 'react-toastify';
-import { LENDING_POOL_CONTRACT_ADDRESS } from '../constants';
-import LendingPoolABI from '../abis/LendingPool.json';
+import { useAccount, useReadContract, useWriteContract } from "wagmi";
+import { parseUnits } from "viem";
+import LendingPoolAbi from "./../abis/LendingPool.json"; // Assume ABI is imported from a generated file
+import { LENDING_POOL_CONTRACT_ADDRESS } from "../constants";
+
+interface LoanDetails {
+  propertyId: bigint;
+  collateralAmount: bigint;
+  borrowedAmount: bigint;
+}
 
 export const useLendingPool = () => {
-  const [loading, setLoading] = useState(false);
+  const { address: userAddress } = useAccount();
+  const {
+    writeContract,
+    isPending: isWritePending,
+    error: writeError,
+  } = useWriteContract();
 
-  // Write contract hook
-  const { writeContract, data: hash, error, isPending } = useWriteContract();
+  // Read: Get user's loan details
+  const {
+    data: loanDetails,
+    isLoading: isLoanLoading,
+    error: loanError,
+  } = useReadContract({
+    address: LENDING_POOL_CONTRACT_ADDRESS,
+    abi: LendingPoolAbi.abi,
+    functionName: "loans",
+    args: [userAddress],
+    query: { enabled: !!userAddress },
+  }) as { data: LoanDetails; isLoading: boolean; error: Error | null };
 
-  // Wait for transaction receipt
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
-    hash,
-  });
+  // Read: Calculate max borrowable amount (requires propertyId and collateralAmount)
+  const calculateMaxBorrow = (propertyId: bigint, collateralAmount: bigint) => {
+    const { data, isLoading, error } = useReadContract({
+      address: LENDING_POOL_CONTRACT_ADDRESS,
+      abi: LendingPoolAbi.abi,
+      functionName: "calculateMaxBorrow",
+      args: [propertyId, collateralAmount],
+    });
+    return { maxBorrow: data as bigint, isLoading, error };
+  };
 
-  // Deposit collateral
-  const depositCollateral = async (propertyId: number, amount: string) => {
+  // Write: Deposit collateral
+  const depositCollateral = async (
+    propertyId: bigint,
+    amount: string,
+    decimals: number = 18
+  ) => {
     try {
-      setLoading(true);
-      const amountInWei = parseEther(amount);
-      
+      const amountInWei = parseUnits(amount, decimals);
       await writeContract({
         address: LENDING_POOL_CONTRACT_ADDRESS,
-        abi: LendingPoolABI.abi,
-        functionName: 'depositCollateral',
+        abi: LendingPoolAbi.abi,
+        functionName: "depositCollateral",
         args: [propertyId, amountInWei],
       });
-
-      toast.success('Collateral deposit transaction submitted!');
-    } catch (error: any) {
-      console.error('Error depositing collateral:', error);
-      toast.error(error.message || 'Failed to deposit collateral');
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error("Deposit collateral error:", err);
+      throw err;
     }
   };
 
-  // Borrow stablecoin
-  const borrowStablecoin = async (amount: string) => {
+  // Write: Borrow stablecoin
+  const borrowStablecoin = async (amount: string, decimals: number = 18) => {
     try {
-      setLoading(true);
-      const amountInWei = parseEther(amount);
-      
+      const amountInWei = parseUnits(amount, decimals);
       await writeContract({
         address: LENDING_POOL_CONTRACT_ADDRESS,
-        abi: LendingPoolABI.abi,
-        functionName: 'borrowStablecoin',
+        abi: LendingPoolAbi.abi,
+        functionName: "borrowStablecoin",
         args: [amountInWei],
       });
-
-      toast.success('Borrow transaction submitted!');
-    } catch (error: any) {
-      console.error('Error borrowing stablecoin:', error);
-      toast.error(error.message || 'Failed to borrow stablecoin');
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error("Borrow stablecoin error:", err);
+      throw err;
     }
   };
 
-  // Repay loan
-  const repayLoan = async (amount: string) => {
+  // Write: Repay loan
+  const repayLoan = async (amount: string, decimals: number = 18) => {
     try {
-      setLoading(true);
-      const amountInWei = parseEther(amount);
-      
+      const amountInWei = parseUnits(amount, decimals);
       await writeContract({
         address: LENDING_POOL_CONTRACT_ADDRESS,
-        abi: LendingPoolABI.abi,
-        functionName: 'repayLoan',
+        abi: LendingPoolAbi.abi,
+        functionName: "repayLoan",
         args: [amountInWei],
       });
-
-      toast.success('Loan repayment transaction submitted!');
-    } catch (error: any) {
-      console.error('Error repaying loan:', error);
-      toast.error(error.message || 'Failed to repay loan');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Calculate max borrow amount
-  const calculateMaxBorrow = async (propertyId: number, collateralAmount: string) => {
-    try {
-      const amountInWei = parseEther(collateralAmount);
-      const result = await readContract({
-        address: LENDING_POOL_CONTRACT_ADDRESS,
-        abi: LendingPoolABI.abi,
-        functionName: 'calculateMaxBorrow',
-        args: [propertyId, amountInWei],
-      });
-      return result ? formatEther(result as bigint) : '0';
-    } catch (error) {
-      console.error('Error calculating max borrow:', error);
-      return '0';
-    }
-  };
-
-  // Get user loan details
-  const getUserLoan = async (userAddress: string) => {
-    try {
-      const result = await readContract({
-        address: LENDING_POOL_CONTRACT_ADDRESS,
-        abi: LendingPoolABI.abi,
-        functionName: 'loans',
-        args: [userAddress],
-      });
-      return result;
-    } catch (error) {
-      console.error('Error fetching user loan:', error);
-      return null;
-    }
-  };
-
-  // Adjust LTV (owner only)
-  const adjustLTV = async (propertyId: number) => {
-    try {
-      setLoading(true);
-      await writeContract({
-        address: LENDING_POOL_CONTRACT_ADDRESS,
-        abi: LendingPoolABI.abi,
-        functionName: 'adjustLTV',
-        args: [propertyId],
-      });
-
-      toast.success('LTV adjustment transaction submitted!');
-    } catch (error: any) {
-      console.error('Error adjusting LTV:', error);
-      toast.error(error.message || 'Failed to adjust LTV');
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error("Repay loan error:", err);
+      throw err;
     }
   };
 
   return {
+    loanDetails,
+    isLoanLoading,
+    loanError,
+    calculateMaxBorrow,
     depositCollateral,
     borrowStablecoin,
     repayLoan,
-    calculateMaxBorrow,
-    getUserLoan,
-    adjustLTV,
-    loading: loading || isPending || isConfirming,
-    isConfirmed,
-    hash,
-    error,
+    isWritePending,
+    writeError,
   };
-};
-
-// Helper function for read contract
-const readContract = async (config: any) => {
-  try {
-    return await wagmiReadContract(config);
-  } catch (error) {
-    console.error('Error reading contract:', error);
-    return null;
-  }
 };
