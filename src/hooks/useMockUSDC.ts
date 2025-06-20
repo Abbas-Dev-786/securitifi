@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { readContract as wagmiReadContract } from 'wagmi/actions';
 import { parseUnits, formatUnits } from 'viem';
 import { toast } from 'react-toastify';
 import { MOCK_USDC_CONTRACT_ADDRESS } from '../constants';
@@ -129,5 +130,10 @@ export const useMockUSDC = () => {
 
 // Helper function for read contract
 const readContract = async (config: any) => {
-  return null;
+  try {
+    return await wagmiReadContract(config);
+  } catch (error) {
+    console.error('Error reading contract:', error);
+    return null;
+  }
 };
