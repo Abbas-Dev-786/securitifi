@@ -4,7 +4,7 @@ import { readContract as wagmiReadContract } from 'wagmi/actions';
 import { parseEther, formatEther } from 'viem';
 import { toast } from 'react-toastify';
 import { PROPERTY_MANAGER_CONTRACT_ADDRESS } from '../constants';
-import PropertyManagerABI from '../abis/PropertyManager.json';
+import PropertyManagerABI from '../contracts/abis/PropertyManager.json';
 
 export const usePropertyManager = () => {
   const [loading, setLoading] = useState(false);
