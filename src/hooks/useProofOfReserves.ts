@@ -1,117 +1,111 @@
-import { useState } from 'react';
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { readContract as wagmiReadContract } from 'wagmi/actions';
-import { toast } from 'react-toastify';
-import { POR_VERIFIER_CONTRACT_ADDRESS } from '../constants';
-import PoRVerifierABI from '../abis/PoRVerifier.json';
+import { useState, useCallback } from "react";
+import { useReadContract, useWriteContract } from "wagmi";
+import { Address } from "viem";
+import PoRVerifierABI from "../abis/PoRVerifier.json";
+import { POR_VERIFIER_CONTRACT_ADDRESS } from "../constants";
 
-export const useProofOfReserves = () => {
-  const [loading, setLoading] = useState(false);
+// Types for write operations
+type WriteFunctionName =
+  | "checkReserveStatus"
+  | "pauseOperations"
+  | "setPoRFeed"
+  | "transferOwnership"
+  | "renounceOwnership";
 
-  // Write contract hook
-  const { writeContract, data: hash, error, isPending } = useWriteContract();
+interface PoRVerifierHook {
+  // Read functions
+  owner: { data: Address | undefined; isLoading: boolean; error: Error | null };
+  propertyPoRFeed: {
+    data: Address | undefined;
+    isLoading: boolean;
+    error: Error | null;
+  };
+  setPropertyId: (propertyId: bigint | undefined) => void;
+  // Write function
+  writeContract: <T extends WriteFunctionName>(
+    functionName: T,
+    args: T extends "checkReserveStatus"
+      ? [bigint]
+      : T extends "pauseOperations"
+      ? [bigint]
+      : T extends "setPoRFeed"
+      ? [bigint, Address]
+      : T extends "transferOwnership"
+      ? [Address]
+      : []
+  ) => void;
+  writeStatus: {
+    isPending: boolean;
+    isSuccess: boolean;
+    error: Error | null;
+  };
+}
 
-  // Wait for transaction receipt
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
-    hash,
+export const usePoRVerifier = (initialPropertyId?: bigint): PoRVerifierHook => {
+  const [propertyId, setPropertyId] = useState<bigint | undefined>(
+    initialPropertyId
+  );
+
+  // Read: owner
+  const owner = useReadContract({
+    address: POR_VERIFIER_CONTRACT_ADDRESS,
+    abi: PoRVerifierABI.abi,
+    functionName: "owner",
   });
 
-  // Check reserve status
-  const checkReserveStatus = async (propertyId: number) => {
-    try {
-      setLoading(true);
-      await writeContract({
+  // Read: propertyPoRFeed
+  const propertyPoRFeed = useReadContract({
+    address: POR_VERIFIER_CONTRACT_ADDRESS,
+    abi: PoRVerifierABI.abi,
+    functionName: "propertyPoRFeed",
+    args: propertyId ? [propertyId] : undefined,
+    query: { enabled: !!propertyId },
+  });
+
+  // Write: Single useWriteContract for all write operations
+  const { writeContract, isPending, isSuccess, error } = useWriteContract();
+
+  // Generic write function
+  const writeContractWrapper = useCallback(
+    <T extends WriteFunctionName>(
+      functionName: T,
+      args: T extends "checkReserveStatus"
+        ? [bigint]
+        : T extends "pauseOperations"
+        ? [bigint]
+        : T extends "setPoRFeed"
+        ? [bigint, Address]
+        : T extends "transferOwnership"
+        ? [Address]
+        : []
+    ) => {
+      writeContract({
         address: POR_VERIFIER_CONTRACT_ADDRESS,
         abi: PoRVerifierABI.abi,
-        functionName: 'checkReserveStatus',
-        args: [propertyId],
+        functionName,
+        args,
       });
-
-      toast.success('Reserve status check initiated!');
-      return true;
-    } catch (error: any) {
-      console.error('Error checking reserve status:', error);
-      toast.error(error.message || 'Failed to check reserve status');
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Set PoR feed (owner only)
-  const setPoRFeed = async (propertyId: number, feedAddress: string) => {
-    try {
-      setLoading(true);
-      await writeContract({
-        address: POR_VERIFIER_CONTRACT_ADDRESS,
-        abi: PoRVerifierABI.abi,
-        functionName: 'setPoRFeed',
-        args: [propertyId, feedAddress],
-      });
-
-      toast.success('PoR feed configuration submitted!');
-    } catch (error: any) {
-      console.error('Error setting PoR feed:', error);
-      toast.error(error.message || 'Failed to set PoR feed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Pause operations (owner only)
-  const pauseOperations = async (propertyId: number) => {
-    try {
-      setLoading(true);
-      await writeContract({
-        address: POR_VERIFIER_CONTRACT_ADDRESS,
-        abi: PoRVerifierABI.abi,
-        functionName: 'pauseOperations',
-        args: [propertyId],
-      });
-
-      toast.success('Operations pause initiated!');
-    } catch (error: any) {
-      console.error('Error pausing operations:', error);
-      toast.error(error.message || 'Failed to pause operations');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Get PoR feed address
-  const getPoRFeed = async (propertyId: number) => {
-    try {
-      const result = await readContract({
-        address: POR_VERIFIER_CONTRACT_ADDRESS,
-        abi: PoRVerifierABI.abi,
-        functionName: 'propertyPoRFeed',
-        args: [propertyId],
-      });
-      return result as string;
-    } catch (error) {
-      console.error('Error fetching PoR feed:', error);
-      return '';
-    }
-  };
+    },
+    [writeContract]
+  );
 
   return {
-    checkReserveStatus,
-    setPoRFeed,
-    pauseOperations,
-    getPoRFeed,
-    loading: loading || isPending || isConfirming,
-    isConfirmed,
-    hash,
-    error,
+    owner: {
+      data: owner.data as Address | undefined,
+      isLoading: owner.isLoading,
+      error: owner.error,
+    },
+    propertyPoRFeed: {
+      data: propertyPoRFeed.data as Address | undefined,
+      isLoading: propertyPoRFeed.isLoading,
+      error: propertyPoRFeed.error,
+    },
+    setPropertyId,
+    writeContract: writeContractWrapper,
+    writeStatus: {
+      isPending,
+      isSuccess,
+      error,
+    },
   };
-};
-
-// Helper function for read contract
-const readContract = async (config: any) => {
-  try {
-    return await wagmiReadContract(config);
-  } catch (error) {
-    console.error('Error reading contract:', error);
-    return null;
-  }
 };

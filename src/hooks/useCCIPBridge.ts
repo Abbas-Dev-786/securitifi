@@ -1,123 +1,247 @@
-import { useState } from 'react';
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { readContract as wagmiReadContract } from 'wagmi/actions';
-import { parseEther, formatEther } from 'viem';
-import { toast } from 'react-toastify';
-import { CCIP_BRIDGE_CONTRACT_ADDRESS } from '../constants';
-import CCIPBridgeABI from '../abis/CCIPBridge.json';
+import { useState, useCallback } from "react";
+import { useReadContract, useWriteContract } from "wagmi";
+import { Address } from "viem";
+import CCIPBridgeABI from "./../abis/CCIPBridge.json";
+import { CCIP_BRIDGE_CONTRACT_ADDRESS } from "../constants";
 
-export const useCCIPBridge = () => {
-  const [loading, setLoading] = useState(false);
+// Types for event data
+interface TokensLockedEvent {
+  sender: Address;
+  propertyId: bigint;
+  amount: bigint;
+  destinationChain: string;
+}
 
-  // Write contract hook
-  const { writeContract, data: hash, error, isPending } = useWriteContract();
+interface TokensMintedEvent {
+  receiver: Address;
+  propertyId: bigint;
+  amount: bigint;
+  sourceChain: string;
+}
 
-  // Wait for transaction receipt
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
-    hash,
+// Types for write operations
+type WriteFunctionName =
+  | "lockAndSend"
+  | "setDestinationChain"
+  | "transferOwnership"
+  | "renounceOwnership";
+
+interface CCIPBridgeHook {
+  // Read functions
+  ccipRouter: {
+    data: Address | undefined;
+    isLoading: boolean;
+    error: Error | null;
+  };
+  realEstateToken: {
+    data: Address | undefined;
+    isLoading: boolean;
+    error: Error | null;
+  };
+  chainSelector: {
+    data: bigint | undefined;
+    isLoading: boolean;
+    error: Error | null;
+  };
+  destinationBridge: {
+    data: Address | undefined;
+    isLoading: boolean;
+    error: Error | null;
+  };
+  owner: { data: Address | undefined; isLoading: boolean; error: Error | null };
+  setChainName: (chainName: string | undefined) => void;
+  // Write function
+  writeContract: <T extends WriteFunctionName>(
+    functionName: T,
+    args: T extends "lockAndSend"
+      ? [Address, bigint, bigint, string]
+      : T extends "setDestinationChain"
+      ? [string, bigint, Address]
+      : T extends "transferOwnership"
+      ? [Address]
+      : []
+  ) => void;
+  writeStatus: {
+    isPending: boolean;
+    isSuccess: boolean;
+    error: Error | null;
+  };
+  // Events
+  onTokensLocked: (callback: (event: TokensLockedEvent) => void) => void;
+  onTokensMinted: (callback: (event: TokensMintedEvent) => void) => void;
+}
+
+export const useCCIPBridge = (initialChainName?: string): CCIPBridgeHook => {
+  const [chainName, setChainName] = useState<string | undefined>(
+    initialChainName
+  );
+
+  // Read: ccipRouter
+  const ccipRouter = useReadContract({
+    address: CCIP_BRIDGE_CONTRACT_ADDRESS,
+    abi: CCIPBridgeABI.abi,
+    functionName: "ccipRouter",
   });
 
-  // Lock and send tokens cross-chain
-  const lockAndSend = async (
-    recipient: string,
-    propertyId: number,
-    amount: string,
-    destinationChain: string
-  ) => {
-    try {
-      setLoading(true);
-      const amountInWei = parseEther(amount);
-      
-      await writeContract({
+  // Read: realEstateToken
+  const realEstateToken = useReadContract({
+    address: CCIP_BRIDGE_CONTRACT_ADDRESS,
+    abi: CCIPBridgeABI.abi,
+    functionName: "realEstateToken",
+  });
+
+  // Read: owner
+  const owner = useReadContract({
+    address: CCIP_BRIDGE_CONTRACT_ADDRESS,
+    abi: CCIPBridgeABI.abi,
+    functionName: "owner",
+  });
+
+  // Read: chainSelectors
+  const chainSelector = useReadContract({
+    address: CCIP_BRIDGE_CONTRACT_ADDRESS,
+    abi: CCIPBridgeABI.abi,
+    functionName: "chainSelectors",
+    args: chainName ? [chainName] : undefined,
+    query: { enabled: !!chainName },
+  });
+
+  // Read: destinationBridges
+  const destinationBridge = useReadContract({
+    address: CCIP_BRIDGE_CONTRACT_ADDRESS,
+    abi: CCIPBridgeABI.abi,
+    functionName: "destinationBridges",
+    args: chainName ? [chainName] : undefined,
+    query: { enabled: !!chainName },
+  });
+
+  // Write: Single useWriteContract for all write operations
+  const { writeContract, isPending, isSuccess, error } = useWriteContract();
+
+  // Generic write function
+  const writeContractWrapper = useCallback(
+    <T extends WriteFunctionName>(
+      functionName: T,
+      args: T extends "lockAndSend"
+        ? [Address, bigint, bigint, string]
+        : T extends "setDestinationChain"
+        ? [string, bigint, Address]
+        : T extends "transferOwnership"
+        ? [Address]
+        : []
+    ) => {
+      writeContract({
         address: CCIP_BRIDGE_CONTRACT_ADDRESS,
         abi: CCIPBridgeABI.abi,
-        functionName: 'lockAndSend',
-        args: [recipient, propertyId, amountInWei, destinationChain],
+        functionName,
+        args,
       });
+    },
+    [writeContract]
+  );
 
-      toast.success('Cross-chain transfer transaction submitted!');
-    } catch (error: any) {
-      console.error('Error initiating cross-chain transfer:', error);
-      toast.error(error.message || 'Failed to initiate cross-chain transfer');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Event handlers
+  const [tokensLockedCallback, setTokensLockedCallback] = useState<
+    ((event: TokensLockedEvent) => void) | null
+  >(null);
+  const [tokensMintedCallback, setTokensMintedCallback] = useState<
+    ((event: TokensMintedEvent) => void) | null
+  >(null);
 
-  // Set destination chain (owner only)
-  const setDestinationChain = async (
-    chainName: string,
-    chainSelector: bigint,
-    bridgeAddress: string
-  ) => {
-    try {
-      setLoading(true);
-      await writeContract({
-        address: CCIP_BRIDGE_CONTRACT_ADDRESS,
-        abi: CCIPBridgeABI.abi,
-        functionName: 'setDestinationChain',
-        args: [chainName, chainSelector, bridgeAddress],
-      });
+  // Event: TokensLocked
+  // useContractEvent({
+  //   address: contractAddress,
+  //   abi: CCIPBridgeABI.abi,
+  //   eventName: "TokensLocked",
+  //   listener: (logs: any) => {
+  //     if (!tokensLockedCallback) return;
+  //     const parsedLogs = parseEventLogs({
+  //       abi: CCIPBridgeABI.abi,
+  //       eventName: "TokensLocked",
+  //       logs,
+  //     });
+  //     parsedLogs.forEach((log: any) => {
+  //       tokensLockedCallback({
+  //         sender: log.args.sender!,
+  //         propertyId: log.args.propertyId!,
+  //         amount: log.args.amount!,
+  //         destinationChain: log.args.destinationChain!,
+  //       });
+  //     });
+  //   },
+  // });
 
-      toast.success('Destination chain configuration submitted!');
-    } catch (error: any) {
-      console.error('Error setting destination chain:', error);
-      toast.error(error.message || 'Failed to set destination chain');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // // Event: TokensMinted
+  // useContractEvent({
+  //   address: contractAddress,
+  //   abi: CCIPBridgeABI,
+  //   eventName: "TokensMinted",
+  //   listener: (logs: any) => {
+  //     if (!tokensMintedCallback) return;
+  //     const parsedLogs = parseEventLogs({
+  //       abi: CCIPBridgeABI.abi,
+  //       eventName: "TokensMinted",
+  //       logs,
+  //     });
+  //     parsedLogs.forEach((log: any) => {
+  //       tokensMintedCallback({
+  //         receiver: log.args.receiver!,
+  //         propertyId: log.args.propertyId!,
+  //         amount: log.args.amount!,
+  //         sourceChain: log.args.sourceChain!,
+  //       });
+  //     });
+  //   },
+  // });
 
-  // Get chain selector
-  const getChainSelector = async (chainName: string) => {
-    try {
-      const result = await readContract({
-        address: CCIP_BRIDGE_CONTRACT_ADDRESS,
-        abi: CCIPBridgeABI.abi,
-        functionName: 'chainSelectors',
-        args: [chainName],
-      });
-      return result ? Number(result) : 0;
-    } catch (error) {
-      console.error('Error fetching chain selector:', error);
-      return 0;
-    }
-  };
+  const onTokensLocked = useCallback(
+    (callback: (event: TokensLockedEvent) => void) => {
+      setTokensLockedCallback(() => callback);
+    },
+    []
+  );
 
-  // Get destination bridge address
-  const getDestinationBridge = async (chainName: string) => {
-    try {
-      const result = await readContract({
-        address: CCIP_BRIDGE_CONTRACT_ADDRESS,
-        abi: CCIPBridgeABI.abi,
-        functionName: 'destinationBridges',
-        args: [chainName],
-      });
-      return result as string;
-    } catch (error) {
-      console.error('Error fetching destination bridge:', error);
-      return '';
-    }
-  };
+  const onTokensMinted = useCallback(
+    (callback: (event: TokensMintedEvent) => void) => {
+      setTokensMintedCallback(() => callback);
+    },
+    []
+  );
 
   return {
-    lockAndSend,
-    setDestinationChain,
-    getChainSelector,
-    getDestinationBridge,
-    loading: loading || isPending || isConfirming,
-    isConfirmed,
-    hash,
-    error,
+    ccipRouter: {
+      data: ccipRouter.data as Address | undefined,
+      isLoading: ccipRouter.isLoading,
+      error: ccipRouter.error,
+    },
+    realEstateToken: {
+      data: realEstateToken.data as Address | undefined,
+      isLoading: realEstateToken.isLoading,
+      error: realEstateToken.error,
+    },
+    owner: {
+      data: owner.data as Address | undefined,
+      isLoading: owner.isLoading,
+      error: owner.error,
+    },
+    chainSelector: {
+      data: chainSelector.data as bigint | undefined,
+      isLoading: chainSelector.isLoading,
+      error: chainSelector.error,
+    },
+    destinationBridge: {
+      data: destinationBridge.data as Address | undefined,
+      isLoading: destinationBridge.isLoading,
+      error: destinationBridge.error,
+    },
+    setChainName,
+    writeContract: writeContractWrapper,
+    writeStatus: {
+      isPending,
+      isSuccess,
+      error,
+    },
+    onTokensLocked,
+    onTokensMinted,
   };
-};
-
-// Helper function for read contract
-const readContract = async (config: any) => {
-  try {
-    return await wagmiReadContract(config);
-  } catch (error) {
-    console.error('Error reading contract:', error);
-    return null;
-  }
 };
