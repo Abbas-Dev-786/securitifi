@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeftRight,
@@ -10,44 +10,39 @@ import {
   RefreshCw,
   Zap,
 } from "lucide-react";
+import { useAccount } from "wagmi";
+import { formatUnits, parseUnits, Address } from "viem";
+import { useCCIPBridge } from "./../hooks/useCCIPBridge";
+import { usePropertyManager } from "./../hooks/usePropertyManager";
+import { useRealEstateToken } from "./../hooks/useRealEstateToken";
+
+interface Transfer {
+  id: number;
+  recipient: Address;
+  propertyId: bigint;
+  amount: string;
+  status: "pending" | "confirmed" | "failed";
+  timestamp: Date;
+  destinationChain: string;
+  txHash: string;
+}
 
 const Bridge: React.FC = () => {
-  const { lockAndSend, transfers, loading } = {
-    lockAndSend: (
-      recipient: string,
-      propertyId: number,
-      amount: string,
-      toChain: string
-    ) => {
-      console.log(
-        "Locking and sending",
-        recipient,
-        propertyId,
-        amount,
-        toChain
-      );
-    },
-    transfers: [
-      {
-        id: 1,
-        recipient: "0x1234...5678",
-        propertyId: 1,
-        amount: "1000000000000000000",
-        status: "confirmed",
-        timestamp: new Date(),
-        destinationChain: "mumbai",
-        txHash: "0x1234...5678",
-      },
-    ],
-    loading: false,
-  };
-  const { properties, fetchUserProperties } = {
-    properties: [
-      { id: 1, propertyAddress: "0x1234...5678" },
-      { id: 2, propertyAddress: "0xabcd...efgh" },
-    ],
-    fetchUserProperties: () => {},
-  };
+  const { address: userAddress, isConnected } = useAccount();
+  const { properties, loading: propertiesLoading } = usePropertyManager();
+  const {
+    ccipRouter,
+    destinationBridge,
+    writeContract,
+    writeStatus,
+    onTokensLocked,
+  } = useCCIPBridge();
+
+  const {
+    balanceOf,
+    isApprovedForAll,
+    writeContract: writeTokenContract,
+  } = useRealEstateToken(userAddress);
 
   const [fromChain, setFromChain] = useState("sepolia");
   const [toChain, setToChain] = useState("mumbai");
@@ -56,6 +51,9 @@ const Bridge: React.FC = () => {
     propertyId: "",
     amount: "",
   });
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [error, setError] = useState<string | undefined>();
+  const [isApproving, setIsApproving] = useState(false);
 
   const chains = [
     {
@@ -64,6 +62,7 @@ const Bridge: React.FC = () => {
       symbol: "ETH",
       color: "from-blue-500 to-blue-600",
       explorer: "https://sepolia.etherscan.io",
+      chainSelector: "16015286601757825753", // Example Sepolia chain selector
     },
     {
       id: "mumbai",
@@ -71,9 +70,146 @@ const Bridge: React.FC = () => {
       symbol: "MATIC",
       color: "from-purple-500 to-purple-600",
       explorer: "https://mumbai.polygonscan.com",
+      chainSelector: "12532609583862916517", // Example Mumbai chain selector
     },
   ];
 
+  // Fetch chain selector for the destination chain
+  useEffect(() => {
+    if (toChain) {
+      const chainInfo = chains.find((chain) => chain.id === toChain);
+      if (chainInfo) {
+        writeContract("setDestinationChain", [
+          toChain,
+          BigInt(chainInfo.chainSelector),
+          destinationBridge.data || "0x",
+        ]);
+      }
+    }
+  }, [toChain, writeContract, destinationBridge.data]);
+
+  // Listen for TokensLocked events to update transfer history
+  useEffect(() => {
+    onTokensLocked((event) => {
+      setTransfers((prev) => [
+        {
+          id: prev.length + 1,
+          recipient: event.sender,
+          propertyId: event.propertyId,
+          amount: formatUnits(event.amount, 18),
+          status: "pending",
+          timestamp: new Date(),
+          destinationChain: event.destinationChain,
+          txHash: "0x...", // Tx hash not available in event, update later
+        },
+        ...prev,
+      ]);
+    });
+  }, [onTokensLocked]);
+
+  // Check token approval status
+  const checkApproval = useCallback(async () => {
+    if (!userAddress || !ccipRouter.data || !formData.propertyId) return false;
+    return isApprovedForAll.data || false;
+  }, [
+    userAddress,
+    ccipRouter.data,
+    isApprovedForAll.data,
+    formData.propertyId,
+  ]);
+
+  // Handle token approval
+  const handleApprove = useCallback(async () => {
+    if (!userAddress || !ccipRouter.data || !formData.propertyId) {
+      setError("Missing required fields for approval");
+      return;
+    }
+    try {
+      setIsApproving(true);
+      setError(undefined);
+      await writeTokenContract("setApprovalForAll", [ccipRouter.data, true]);
+    } catch (err: any) {
+      setError(err.message || "Failed to approve tokens");
+    } finally {
+      setIsApproving(false);
+    }
+  }, [userAddress, ccipRouter.data, writeTokenContract, formData.propertyId]);
+
+  // Handle input changes
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // Handle chain swap
+  const handleSwapChains = () => {
+    const temp = fromChain;
+    setFromChain(toChain);
+    setToChain(temp);
+  };
+
+  // Handle transfer
+  const handleTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isConnected) {
+      setError("Please connect your wallet");
+      return;
+    }
+    if (!formData.recipient || !formData.propertyId || !formData.amount) {
+      setError("All fields are required");
+      return;
+    }
+
+    try {
+      setError(undefined);
+      const isApproved = await checkApproval();
+      if (!isApproved) {
+        await handleApprove();
+      }
+
+      const propertyId = BigInt(formData.propertyId);
+      const amountInWei = parseUnits(formData.amount, 18);
+      const chainInfo = chains.find((chain) => chain.id === toChain);
+      if (!chainInfo) {
+        setError("Invalid destination chain");
+        return;
+      }
+
+      await writeContract("lockAndSend", [
+        formData.recipient as Address,
+        propertyId,
+        amountInWei,
+        chainInfo.chainSelector,
+      ]);
+
+      setFormData({ recipient: "", propertyId: "", amount: "" });
+    } catch (err: any) {
+      setError(err.message || "Failed to initiate transfer");
+    }
+  };
+
+  // Get chain info
+  const getChainInfo = (chainId: string) => {
+    return chains.find((chain) => chain.id === chainId);
+  };
+
+  // Get status icon
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "confirmed":
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case "pending":
+        return <Clock className="w-4 h-4 text-yellow-500" />;
+      case "failed":
+        return <AlertCircle className="w-4 h-4 text-red-500" />;
+      default:
+        return <Clock className="w-4 h-4 text-gray-500" />;
+    }
+  };
+
+  // Stats for display
   const stats = [
     {
       title: "Total Transfers",
@@ -107,55 +243,6 @@ const Bridge: React.FC = () => {
     },
   ];
 
-  useEffect(() => {
-    fetchUserProperties();
-  }, [fetchUserProperties]);
-
-  const handleSwapChains = () => {
-    const temp = fromChain;
-    setFromChain(toChain);
-    setToChain(temp);
-  };
-
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleTransfer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await lockAndSend(
-        formData.recipient,
-        parseInt(formData.propertyId),
-        formData.amount,
-        toChain
-      );
-      setFormData({ recipient: "", propertyId: "", amount: "" });
-    } catch (error) {
-      console.error("Failed to initiate transfer:", error);
-    }
-  };
-
-  const getChainInfo = (chainId: string) => {
-    return chains.find((chain) => chain.id === chainId);
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "confirmed":
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case "pending":
-        return <Clock className="w-4 h-4 text-yellow-500" />;
-      case "failed":
-        return <AlertCircle className="w-4 h-4 text-red-500" />;
-      default:
-        return <Clock className="w-4 h-4 text-gray-500" />;
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -178,6 +265,17 @@ const Bridge: React.FC = () => {
           </span>
         </div>
       </motion.div>
+
+      {/* Error Message */}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm text-red-700 dark:text-red-300"
+        >
+          {error}
+        </motion.div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -245,7 +343,9 @@ const Bridge: React.FC = () => {
                     ))}
                   </select>
                   <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Balance: 2.45 {getChainInfo(fromChain)?.symbol}
+                    Balance:{" "}
+                    {balanceOf.data ? formatUnits(balanceOf.data, 18) : "0"}{" "}
+                    tokens
                   </span>
                 </div>
 
@@ -259,12 +359,13 @@ const Bridge: React.FC = () => {
                       value={formData.propertyId}
                       onChange={handleInputChange}
                       required
+                      disabled={propertiesLoading}
                       className="w-full bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded-lg px-3 py-2 text-sm"
                     >
                       <option value="">Select Property</option>
                       {properties.map((property) => (
                         <option key={property.id} value={property.id}>
-                          Property #{property.id}
+                          Property #{property.id} ({property.metadataURI})
                         </option>
                       ))}
                     </select>
@@ -326,7 +427,7 @@ const Bridge: React.FC = () => {
                       ))}
                   </select>
                   <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Balance: 1.23 {getChainInfo(toChain)?.symbol}
+                    Balance: 0 tokens
                   </span>
                 </div>
 
@@ -375,24 +476,45 @@ const Bridge: React.FC = () => {
               </div>
             </div>
 
-            {/* Transfer Button */}
-            <button
-              type="submit"
-              disabled={
-                loading ||
-                !formData.recipient ||
-                !formData.propertyId ||
-                !formData.amount
-              }
-              className="w-full bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 disabled:from-gray-400 disabled:to-gray-500 text-white py-4 rounded-lg font-semibold text-lg transition-all duration-200 flex items-center justify-center space-x-2 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <RefreshCw className="w-5 h-5 animate-spin" />
-              ) : (
-                <ArrowLeftRight className="w-5 h-5" />
-              )}
-              <span>{loading ? "Transferring..." : "Transfer"}</span>
-            </button>
+            {/* Approve or Transfer Button */}
+            {isApprovedForAll.data ? (
+              <button
+                type="submit"
+                disabled={
+                  writeStatus.isPending ||
+                  propertiesLoading ||
+                  !formData.recipient ||
+                  !formData.propertyId ||
+                  !formData.amount
+                }
+                className="w-full bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 disabled:from-gray-400 disabled:to-gray-500 text-white py-4 rounded-lg font-semibold text-lg transition-all duration-200 flex items-center justify-center space-x-2 disabled:cursor-not-allowed"
+              >
+                {writeStatus.isPending ? (
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                ) : (
+                  <ArrowLeftRight className="w-5 h-5" />
+                )}
+                <span>
+                  {writeStatus.isPending ? "Transferring..." : "Transfer"}
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleApprove}
+                disabled={
+                  isApproving || propertiesLoading || !formData.propertyId
+                }
+                className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 disabled:from-gray-400 disabled:to-gray-500 text-white py-4 rounded-lg font-semibold text-lg transition-all duration-200 flex items-center justify-center space-x-2 disabled:cursor-not-allowed"
+              >
+                {isApproving ? (
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-5 h-5" />
+                )}
+                <span>{isApproving ? "Approving..." : "Approve Tokens"}</span>
+              </button>
+            )}
           </form>
         </motion.div>
 
@@ -407,7 +529,10 @@ const Bridge: React.FC = () => {
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
               Recent Transfers
             </h3>
-            <button className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 font-medium transition-colors">
+            <button
+              onClick={() => setTransfers([])}
+              className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 font-medium transition-colors"
+            >
               <RefreshCw className="w-4 h-4" />
             </button>
           </div>
@@ -449,10 +574,17 @@ const Bridge: React.FC = () => {
                       {transfer.txHash.slice(0, 10)}...
                       {transfer.txHash.slice(-8)}
                     </div>
-                    <button className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 flex items-center space-x-1">
+                    <a
+                      href={`${getChainInfo(fromChain)?.explorer}/tx/${
+                        transfer.txHash
+                      }`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 flex items-center space-x-1"
+                    >
                       <ExternalLink className="w-3 h-3" />
                       <span>View</span>
-                    </button>
+                    </a>
                   </div>
                 </div>
               ))
