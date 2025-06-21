@@ -1,139 +1,111 @@
-import { useState } from 'react';
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { readContract as wagmiReadContract } from 'wagmi/actions';
-import { parseUnits, formatUnits } from 'viem';
-import { toast } from 'react-toastify';
-import { MOCK_USDC_CONTRACT_ADDRESS } from '../constants';
-import MockUSDCABI from '../abis/MockUSDC.json';
+import { useState, useCallback } from "react";
+import { useAccount, useReadContract, useWriteContract } from "wagmi";
+import { parseUnits, formatUnits } from "viem";
+import MockUSDCAbi from "./../abis/MockUSDC.json";
+import { MOCK_USDC_CONTRACT_ADDRESS } from "../constants";
+import { config } from "../config";
+import { readContract } from "wagmi/actions";
 
 export const useMockUSDC = () => {
+  const { address: userAddress } = useAccount();
+  const [error, setError] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
+  const { writeContractAsync: writeContract } = useWriteContract();
 
-  // Write contract hook
-  const { writeContract, data: hash, error, isPending } = useWriteContract();
+  // Read: Get user's USDC balance
+  const {
+    data: balanceData,
+    isLoading: isBalanceLoading,
+    error: balanceError,
+  } = useReadContract({
+    address: MOCK_USDC_CONTRACT_ADDRESS,
+    abi: MockUSDCAbi.abi,
+    functionName: "balanceOf",
+    args: [userAddress],
+    query: { enabled: !!userAddress },
+  }) as { data: bigint; isLoading: boolean; error: Error | null };
 
-  // Wait for transaction receipt
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
-    hash,
-  });
+  // Read: Get allowance for a spender
+  const getAllowance = useCallback(
+    async (spender: string) => {
+      try {
+        setLoading(true);
+        setError(undefined);
+        const data = (await readContract(config, {
+          address: MOCK_USDC_CONTRACT_ADDRESS,
+          abi: MockUSDCAbi.abi,
+          functionName: "allowance",
+          args: [userAddress, spender],
+        })) as bigint;
+        return {
+          allowance: formatUnits(data, 6),
+          isLoading: false,
+          error: null,
+        };
+      } catch (err: any) {
+        setError(err.message || "Failed to fetch allowance");
+        return { allowance: "0", isLoading: false, error: err };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [userAddress]
+  );
 
-  // Get USDC balance
-  const getBalance = async (account: string) => {
-    try {
-      const result = await readContract({
-        address: MOCK_USDC_CONTRACT_ADDRESS,
-        abi: MockUSDCABI.abi,
-        functionName: 'balanceOf',
-        args: [account],
-      });
-      return result ? formatUnits(result as bigint, 6) : '0'; // USDC has 6 decimals
-    } catch (error) {
-      console.error('Error fetching USDC balance:', error);
-      return '0';
-    }
-  };
+  // Write: Approve a spender
+  const approve = useCallback(
+    async (spender: string, amount: string) => {
+      try {
+        setLoading(true);
+        setError(undefined);
+        const amountInUnits = parseUnits(amount, 6); // USDC has 6 decimals
+        await writeContract({
+          address: MOCK_USDC_CONTRACT_ADDRESS,
+          abi: MockUSDCAbi.abi,
+          functionName: "approve",
+          args: [spender, amountInUnits],
+        });
+      } catch (err: any) {
+        setError(err.message || "Failed to approve USDC");
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [writeContract]
+  );
 
-  // Get allowance
-  const getAllowance = async (owner: string, spender: string) => {
-    try {
-      const result = await readContract({
-        address: MOCK_USDC_CONTRACT_ADDRESS,
-        abi: MockUSDCABI.abi,
-        functionName: 'allowance',
-        args: [owner, spender],
-      });
-      return result ? formatUnits(result as bigint, 6) : '0';
-    } catch (error) {
-      console.error('Error fetching allowance:', error);
-      return '0';
-    }
-  };
-
-  // Approve spending
-  const approve = async (spender: string, amount: string) => {
-    try {
-      setLoading(true);
-      const amountInUnits = parseUnits(amount, 6); // USDC has 6 decimals
-      
-      await writeContract({
-        address: MOCK_USDC_CONTRACT_ADDRESS,
-        abi: MockUSDCABI.abi,
-        functionName: 'approve',
-        args: [spender, amountInUnits],
-      });
-
-      toast.success('USDC approval transaction submitted!');
-    } catch (error: any) {
-      console.error('Error approving USDC:', error);
-      toast.error(error.message || 'Failed to approve USDC');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Transfer USDC
-  const transfer = async (to: string, amount: string) => {
-    try {
-      setLoading(true);
-      const amountInUnits = parseUnits(amount, 6);
-      
-      await writeContract({
-        address: MOCK_USDC_CONTRACT_ADDRESS,
-        abi: MockUSDCABI.abi,
-        functionName: 'transfer',
-        args: [to, amountInUnits],
-      });
-
-      toast.success('USDC transfer transaction submitted!');
-    } catch (error: any) {
-      console.error('Error transferring USDC:', error);
-      toast.error(error.message || 'Failed to transfer USDC');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Transfer from
-  const transferFrom = async (from: string, to: string, amount: string) => {
-    try {
-      setLoading(true);
-      const amountInUnits = parseUnits(amount, 6);
-      
-      await writeContract({
-        address: MOCK_USDC_CONTRACT_ADDRESS,
-        abi: MockUSDCABI.abi,
-        functionName: 'transferFrom',
-        args: [from, to, amountInUnits],
-      });
-
-      toast.success('USDC transfer from transaction submitted!');
-    } catch (error: any) {
-      console.error('Error transferring USDC from:', error);
-      toast.error(error.message || 'Failed to transfer USDC from');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Write: Transfer USDC to another address
+  const transfer = useCallback(
+    async (to: string, amount: string) => {
+      try {
+        setLoading(true);
+        setError(undefined);
+        const amountInUnits = parseUnits(amount, 6);
+        await writeContract({
+          address: MOCK_USDC_CONTRACT_ADDRESS,
+          abi: MockUSDCAbi.abi,
+          functionName: "transfer",
+          args: [to, amountInUnits],
+        });
+      } catch (err: any) {
+        setError(err.message || "Failed to transfer USDC");
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [writeContract]
+  );
 
   return {
-    getBalance,
+    balance: balanceData ? formatUnits(balanceData, 6) : "0",
+    isBalanceLoading,
+    balanceError,
     getAllowance,
     approve,
     transfer,
-    transferFrom,
-    loading: loading || isPending || isConfirming,
-    isConfirmed,
-    hash,
+    loading,
     error,
   };
-};
-
-// Helper function for read contract
-const readContract = async (config: any) => {
-  try {
-    return await wagmiReadContract(config);
-  } catch (error) {
-    console.error('Error reading contract:', error);
-    return null;
-  }
 };

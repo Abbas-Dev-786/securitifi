@@ -1,7 +1,10 @@
+import { useState, useCallback } from "react";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
+import { readContract } from "wagmi/actions";
 import { parseUnits } from "viem";
-import LendingPoolAbi from "./../abis/LendingPool.json"; // Assume ABI is imported from a generated file
+import LendingPoolAbi from "./../abis/LendingPool.json";
 import { LENDING_POOL_CONTRACT_ADDRESS } from "../constants";
+import { config } from "../config";
 
 interface LoanDetails {
   propertyId: bigint;
@@ -11,11 +14,9 @@ interface LoanDetails {
 
 export const useLendingPool = () => {
   const { address: userAddress } = useAccount();
-  const {
-    writeContract,
-    isPending: isWritePending,
-    error: writeError,
-  } = useWriteContract();
+  const [error, setError] = useState<string | undefined>();
+  const [loading, setLoading] = useState(false);
+  const { writeContractAsync: writeContract } = useWriteContract();
 
   // Read: Get user's loan details
   const {
@@ -31,67 +32,96 @@ export const useLendingPool = () => {
   }) as { data: LoanDetails; isLoading: boolean; error: Error | null };
 
   // Read: Calculate max borrowable amount (requires propertyId and collateralAmount)
-  const calculateMaxBorrow = (propertyId: bigint, collateralAmount: bigint) => {
-    const { data, isLoading, error } = useReadContract({
-      address: LENDING_POOL_CONTRACT_ADDRESS,
-      abi: LendingPoolAbi.abi,
-      functionName: "calculateMaxBorrow",
-      args: [propertyId, collateralAmount],
-    });
-    return { maxBorrow: data as bigint, isLoading, error };
-  };
+  const calculateMaxBorrow = useCallback(
+    async (propertyId: bigint, collateralAmount: bigint) => {
+      try {
+        setLoading(true);
+        setError(undefined);
+        const data = (await readContract(config, {
+          address: LENDING_POOL_CONTRACT_ADDRESS,
+          abi: LendingPoolAbi.abi,
+          functionName: "calculateMaxBorrow",
+          args: [propertyId, collateralAmount],
+        })) as bigint;
+        return { maxBorrow: data, isLoading: false, error: null };
+      } catch (err: any) {
+        setError(err.message || "Failed to calculate max borrow");
+        return { maxBorrow: 0n, isLoading: false, error: err };
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
 
   // Write: Deposit collateral
-  const depositCollateral = async (
-    propertyId: bigint,
-    amount: string,
-    decimals: number = 18
-  ) => {
-    try {
-      const amountInWei = parseUnits(amount, decimals);
-      await writeContract({
-        address: LENDING_POOL_CONTRACT_ADDRESS,
-        abi: LendingPoolAbi.abi,
-        functionName: "depositCollateral",
-        args: [propertyId, amountInWei],
-      });
-    } catch (err) {
-      console.error("Deposit collateral error:", err);
-      throw err;
-    }
-  };
+  const depositCollateral = useCallback(
+    async (propertyId: bigint, amount: string, decimals: number = 18) => {
+      try {
+        setLoading(true);
+        setError(undefined);
+        const amountInWei = parseUnits(amount, decimals);
+        await writeContract({
+          address: LENDING_POOL_CONTRACT_ADDRESS,
+          abi: LendingPoolAbi.abi,
+          functionName: "depositCollateral",
+          args: [propertyId, amountInWei],
+        });
+      } catch (err: any) {
+        setError(err.message || "Failed to deposit collateral");
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [writeContract]
+  );
 
   // Write: Borrow stablecoin
-  const borrowStablecoin = async (amount: string, decimals: number = 18) => {
-    try {
-      const amountInWei = parseUnits(amount, decimals);
-      await writeContract({
-        address: LENDING_POOL_CONTRACT_ADDRESS,
-        abi: LendingPoolAbi.abi,
-        functionName: "borrowStablecoin",
-        args: [amountInWei],
-      });
-    } catch (err) {
-      console.error("Borrow stablecoin error:", err);
-      throw err;
-    }
-  };
+  const borrowStablecoin = useCallback(
+    async (amount: string, decimals: number = 18) => {
+      try {
+        setLoading(true);
+        setError(undefined);
+        const amountInWei = parseUnits(amount, decimals);
+        await writeContract({
+          address: LENDING_POOL_CONTRACT_ADDRESS,
+          abi: LendingPoolAbi.abi,
+          functionName: "borrowStablecoin",
+          args: [amountInWei],
+        });
+      } catch (err: any) {
+        setError(err.message || "Failed to borrow stablecoin");
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [writeContract]
+  );
 
   // Write: Repay loan
-  const repayLoan = async (amount: string, decimals: number = 18) => {
-    try {
-      const amountInWei = parseUnits(amount, decimals);
-      await writeContract({
-        address: LENDING_POOL_CONTRACT_ADDRESS,
-        abi: LendingPoolAbi.abi,
-        functionName: "repayLoan",
-        args: [amountInWei],
-      });
-    } catch (err) {
-      console.error("Repay loan error:", err);
-      throw err;
-    }
-  };
+  const repayLoan = useCallback(
+    async (amount: string, decimals: number = 18) => {
+      try {
+        setLoading(true);
+        setError(undefined);
+        const amountInWei = parseUnits(amount, decimals);
+        await writeContract({
+          address: LENDING_POOL_CONTRACT_ADDRESS,
+          abi: LendingPoolAbi.abi,
+          functionName: "repayLoan",
+          args: [amountInWei],
+        });
+      } catch (err: any) {
+        setError(err.message || "Failed to repay loan");
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [writeContract]
+  );
 
   return {
     loanDetails,
@@ -101,7 +131,7 @@ export const useLendingPool = () => {
     depositCollateral,
     borrowStablecoin,
     repayLoan,
-    isWritePending,
-    writeError,
+    loading,
+    error,
   };
 };

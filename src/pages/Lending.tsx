@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Coins,
@@ -12,22 +12,29 @@ import {
 } from "lucide-react";
 import { formatEther } from "viem";
 import { useAppKitAccount } from "@reown/appkit/react";
-// import { useLendingPool } from "../hooks/useLendingPool";
+import { useLendingPool } from "../hooks/useLendingPool";
 import { usePropertyManager } from "../hooks/usePropertyManager";
 import { useMockUSDC } from "../hooks/useMockUSDC";
-import { LENDING_POOL_CONTRACT_ADDRESS } from "../constants";
+import { LENDING_POOL_CONTRACT_ADDRESS } from "./../constants";
 
 const Lending: React.FC = () => {
   const { address } = useAppKitAccount();
-
   const { properties } = usePropertyManager();
-  const { approve, getBalance, getAllowance } = useMockUSDC();
+  const { approve, getAllowance, balance, isBalanceLoading } = useMockUSDC();
+  const {
+    loanDetails,
+    isLoanLoading,
+    loanError,
+    depositCollateral,
+    borrowStablecoin,
+    repayLoan,
+    loading,
+    error,
+  } = useLendingPool();
 
   const [activeTab, setActiveTab] = useState<"borrow" | "lend">("borrow");
-  const [userLoan, setUserLoan] = useState<any>(null);
   const [usdcBalance, setUsdcBalance] = useState("0");
   const [allowance, setAllowance] = useState("0");
-
   const [collateralForm, setCollateralForm] = useState({
     propertyId: "",
     amount: "",
@@ -63,39 +70,57 @@ const Lending: React.FC = () => {
     },
   ];
 
+  // Update USDC balance and allowance when address or balance changes
+  useEffect(() => {
+    const fetchAllowance = async () => {
+      if (address) {
+        setUsdcBalance(balance);
+        const allowanceResult = await getAllowance(
+          LENDING_POOL_CONTRACT_ADDRESS
+        );
+        setAllowance(allowanceResult.allowance);
+      }
+    };
+    fetchAllowance();
+  }, [address, balance, getAllowance]);
+
   const stats = [
     {
       title: "Total Borrowed",
-      value: userLoan
-        ? `$${parseFloat(
-            formatEther(userLoan.borrowedAmount)
-          ).toLocaleString()}`
-        : "$0",
+      value:
+        // loanDetails
+        //   ? `$${parseFloat(formatEther(loanDetails.borrowedAmount))}`
+        //   :
+        "$0",
       icon: Coins,
       color: "from-blue-500 to-cyan-500",
       description: "Active loan amount",
     },
     {
       title: "Collateral Deposited",
-      value: userLoan
-        ? `${parseFloat(formatEther(userLoan.collateralAmount)).toFixed(
-            2
-          )} tokens`
-        : "0 tokens",
+      value:
+        //  loanDetails
+        //   ? `${parseFloat(formatEther(loanDetails.collateralAmount)).toFixed(
+        //       2
+        //     )} tokens`
+        //   :
+        "0 tokens",
       icon: Clock,
       color: "from-green-500 to-emerald-500",
       description: "Current collateral",
     },
     {
       title: "USDC Balance",
-      value: `$${parseFloat(usdcBalance).toLocaleString()}`,
+      value: isBalanceLoading
+        ? "Loading..."
+        : `$${parseFloat(usdcBalance).toLocaleString()}`,
       icon: TrendingUp,
       color: "from-purple-500 to-pink-500",
       description: "Available balance",
     },
     {
       title: "Health Factor",
-      value: userLoan ? "155%" : "N/A",
+      value: loanDetails ? "155%" : "N/A",
       icon: Shield,
       color: "from-orange-500 to-red-500",
       description: "Loan safety ratio",
@@ -105,8 +130,11 @@ const Lending: React.FC = () => {
   const handleDepositCollateral = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      await depositCollateral(
+        BigInt(collateralForm.propertyId),
+        collateralForm.amount
+      );
       setCollateralForm({ propertyId: "", amount: "" });
-      // Refresh user loan data
     } catch (error) {
       console.error("Failed to deposit collateral:", error);
     }
@@ -115,11 +143,9 @@ const Lending: React.FC = () => {
   const handleBorrow = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      await borrowStablecoin(borrowForm.amount);
       setBorrowForm({ amount: "" });
-      // Refresh balances
       if (address) {
-        console.log("a");
-        const balance = await getBalance(address);
         setUsdcBalance(balance);
       }
     } catch (error) {
@@ -130,14 +156,14 @@ const Lending: React.FC = () => {
   const handleRepay = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      await repayLoan(repayForm.amount);
       setRepayForm({ amount: "" });
-      // Refresh balances
       if (address) {
-        console.log(address);
-        // const loan = await getUserLoan(address);
-        // setUserLoan(loan);
-        const balance = await getBalance(address);
         setUsdcBalance(balance);
+        const allowanceResult = await getAllowance(
+          LENDING_POOL_CONTRACT_ADDRESS
+        );
+        setAllowance(allowanceResult.allowance);
       }
     } catch (error) {
       console.error("Failed to repay:", error);
@@ -147,13 +173,11 @@ const Lending: React.FC = () => {
   const handleApproveUSDC = async (amount: string) => {
     try {
       await approve(LENDING_POOL_CONTRACT_ADDRESS, amount);
-      // Refresh allowance
       if (address) {
-        const allowanceAmount = await getAllowance(
-          address,
+        const allowanceResult = await getAllowance(
           LENDING_POOL_CONTRACT_ADDRESS
         );
-        setAllowance(allowanceAmount);
+        setAllowance(allowanceResult.allowance);
       }
     } catch (error) {
       console.error("Failed to approve USDC:", error);
@@ -178,6 +202,18 @@ const Lending: React.FC = () => {
         </div>
       </motion.div>
 
+      {/* Error Display */}
+      {error && (
+        <div className="bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-4 rounded-lg">
+          Error: {error}
+        </div>
+      )}
+      {loanError && (
+        <div className="bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-4 rounded-lg">
+          Loan Error: {loanError.message}
+        </div>
+      )}
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, index) => (
@@ -194,7 +230,9 @@ const Lending: React.FC = () => {
                   {stat.title}
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-                  {stat.value}
+                  {isLoanLoading && stat.title !== "USDC Balance"
+                    ? "Loading..."
+                    : stat.value}
                 </p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                   {stat.description}
@@ -265,6 +303,7 @@ const Lending: React.FC = () => {
                       }
                       className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       required
+                      disabled={loading}
                     >
                       <option value="">Select a property</option>
                       {properties.map((property) => (
@@ -292,6 +331,7 @@ const Lending: React.FC = () => {
                       min="0"
                       className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       required
+                      disabled={loading}
                     />
                   </div>
                 </div>
@@ -299,11 +339,13 @@ const Lending: React.FC = () => {
                 <button
                   type="submit"
                   disabled={
-                    !collateralForm.propertyId || !collateralForm.amount
+                    loading ||
+                    !collateralForm.propertyId ||
+                    !collateralForm.amount
                   }
                   className="w-full bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 disabled:from-gray-400 disabled:to-gray-500 text-white py-3 px-4 rounded-lg font-medium transition-all duration-200 disabled:cursor-not-allowed"
                 >
-                  {"Deposit Collateral"}
+                  {loading ? "Processing..." : "Deposit Collateral"}
                 </button>
               </form>
             </div>
@@ -332,6 +374,7 @@ const Lending: React.FC = () => {
                       min="0"
                       className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       required
+                      disabled={loading}
                     />
                   </div>
 
@@ -341,11 +384,14 @@ const Lending: React.FC = () => {
                         Collateral deposited:
                       </span>
                       <span className="font-medium text-gray-900 dark:text-white">
-                        {userLoan
-                          ? `${parseFloat(
-                              formatEther(userLoan.collateralAmount)
-                            ).toFixed(2)} tokens`
-                          : "0 tokens"}
+                        {
+                          // loanDetails
+                          //   ? `${parseFloat(
+                          //       formatEther(loanDetails.collateralAmount)
+                          //     ).toFixed(2)} tokens`
+                          //   :
+                          "0 tokens"
+                        }
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
@@ -360,10 +406,14 @@ const Lending: React.FC = () => {
 
                   <button
                     type="submit"
-                    disabled={!borrowForm.amount || !userLoan?.collateralAmount}
+                    disabled={
+                      loading ||
+                      !borrowForm.amount ||
+                      !loanDetails?.collateralAmount
+                    }
                     className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:from-gray-400 disabled:to-gray-500 text-white py-3 px-4 rounded-lg font-medium transition-all duration-200 disabled:cursor-not-allowed"
                   >
-                    {"Borrow USDC"}
+                    {loading ? "Processing..." : "Borrow USDC"}
                   </button>
                 </form>
               </div>
@@ -388,6 +438,7 @@ const Lending: React.FC = () => {
                       min="0"
                       className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       required
+                      disabled={loading}
                     />
                   </div>
 
@@ -397,11 +448,14 @@ const Lending: React.FC = () => {
                         Outstanding debt:
                       </span>
                       <span className="font-medium text-gray-900 dark:text-white">
-                        {userLoan
-                          ? `$${parseFloat(
-                              formatEther(userLoan.borrowedAmount)
-                            ).toLocaleString()}`
-                          : "$0"}
+                        {
+                          // loanDetails
+                          //   ? `$${parseFloat(
+                          //       formatEther(loanDetails.borrowedAmount)
+                          //     ).toLocaleString()}`
+                          //   :
+                          "$0"
+                        }
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
@@ -409,7 +463,9 @@ const Lending: React.FC = () => {
                         USDC Balance:
                       </span>
                       <span className="font-medium text-gray-900 dark:text-white">
-                        ${parseFloat(usdcBalance).toLocaleString()}
+                        {isBalanceLoading
+                          ? "Loading..."
+                          : `$${parseFloat(usdcBalance).toLocaleString()}`}
                       </span>
                     </div>
                   </div>
@@ -421,8 +477,9 @@ const Lending: React.FC = () => {
                         handleApproveUSDC(repayForm.amount || "1000000")
                       }
                       disabled={
+                        loading ||
                         parseFloat(allowance) >=
-                        parseFloat(repayForm.amount || "0")
+                          parseFloat(repayForm.amount || "0")
                       }
                       className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-2 px-4 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
                     >
@@ -433,10 +490,14 @@ const Lending: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      disabled={!repayForm.amount || !userLoan?.borrowedAmount}
+                      disabled={
+                        loading ||
+                        !repayForm.amount ||
+                        !loanDetails?.borrowedAmount
+                      }
                       className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 disabled:from-gray-400 disabled:to-gray-500 text-white py-2 px-4 rounded-lg font-medium transition-all duration-200 disabled:cursor-not-allowed"
                     >
-                      {"Repay Loan"}
+                      {loading ? "Processing..." : "Repay Loan"}
                     </button>
                   </div>
                 </form>
