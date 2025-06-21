@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import {
   DollarSign,
@@ -13,94 +13,131 @@ import {
   Filter,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { usePropertyManager } from "./../hooks/usePropertyManager";
+import { useRentDistributionVault } from "./../hooks/useRentDistribution";
+import { useReadContracts } from "wagmi";
+import { parseUnits, Abi } from "viem"; // Import Abi type
+import RentDistributionVaultABI from "./../abis/RentDistributionVault.json";
+import { RENT_DISTRIBUTION_VAULT_CONTRACT_ADDRESS } from "../constants";
+
+// Utility to format USDC amounts
+const formatUSDC = (amount: bigint): string => {
+  return (Number(amount) / 1e6).toFixed(2);
+};
 
 const RentDistribution: React.FC = () => {
-  const { wallet } = {
-    wallet: {
-      address: "0x1234567890123456789012345678901234567890",
-    },
-  };
-  const { isReady } = {
-    isReady: true,
-  };
+  const {
+    isOwner: isPropertyOwner,
+    properties,
+    loading: propertiesLoading,
+    error: propertiesError,
+  } = usePropertyManager();
+  const rentDistributionHook = useRentDistributionVault();
   const [loading, setLoading] = useState(false);
-  const [isOwner, setIsOwner] = useState(false);
-  const [formData, setFormData] = useState({
-    propertyId: "",
-    amount: "",
-  });
+  const [formData, setFormData] = useState({ propertyId: "", amount: "" });
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
 
-  // Mock data for rent pools
-  const [rentPools] = useState([
-    {
-      propertyId: "1",
-      address: "123 Main Street, NYC",
-      balance: "5,250",
-      totalDistributed: "18,750",
-      lastDistribution: "2024-01-15",
-      upkeepStatus: "ready",
-      tokenHolders: 45,
-      nextDistribution: "2024-02-15",
-    },
-    {
-      propertyId: "2",
-      address: "456 Oak Avenue, LA",
-      balance: "3,800",
-      totalDistributed: "12,400",
-      lastDistribution: "2024-01-10",
-      upkeepStatus: "pending",
-      tokenHolders: 32,
-      nextDistribution: "2024-02-10",
-    },
-    {
-      propertyId: "3",
-      address: "789 Pine Road, Chicago",
-      balance: "7,100",
-      totalDistributed: "25,600",
-      lastDistribution: "2024-01-20",
-      upkeepStatus: "ready",
-      tokenHolders: 67,
-      nextDistribution: "2024-02-20",
-    },
-  ]);
+  // Define contract calls with type assertions
+  const rentPoolCalls = properties.map((property) => ({
+    address: RENT_DISTRIBUTION_VAULT_CONTRACT_ADDRESS as `0x${string}`,
+    abi: RentDistributionVaultABI.abi as Abi,
+    functionName: "rentPool",
+    args: [BigInt(property.id)],
+  }));
+  const lastDistributionCalls = properties.map((property) => ({
+    address: RENT_DISTRIBUTION_VAULT_CONTRACT_ADDRESS as `0x${string}`,
+    abi: RentDistributionVaultABI.abi as Abi,
+    functionName: "lastDistribution",
+    args: [BigInt(property.id)],
+  }));
 
+  const { data: rentPoolData, isLoading: rentPoolLoading } = useReadContracts({
+    contracts: rentPoolCalls,
+    query: { enabled: properties.length > 0 },
+  });
+  const { data: lastDistributionData, isLoading: lastDistributionLoading } =
+    useReadContracts({
+      contracts: lastDistributionCalls,
+      query: { enabled: properties.length > 0 },
+    });
+
+  // Calculate total rent pool
+  const totalRentPool =
+    rentPoolData?.reduce(
+      (sum, { result }) => sum + (typeof result === "bigint" ? result : 0n),
+      0n
+    ) || 0n;
+
+  // Construct rent pools data
+  const rentPools = properties.map((property, index) => {
+    const rentPool =
+      typeof rentPoolData?.[index]?.result === "bigint"
+        ? rentPoolData[index].result
+        : 0n;
+    const lastDistribution =
+      typeof lastDistributionData?.[index]?.result === "bigint"
+        ? lastDistributionData[index].result
+        : 0n;
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const upkeepStatus =
+      rentPool > 0n &&
+      currentTimestamp > Number(lastDistribution) + 30 * 24 * 3600
+        ? "ready"
+        : "pending";
+    const lastDistributionDate =
+      lastDistribution > 0n
+        ? new Date(Number(lastDistribution) * 1000).toLocaleDateString()
+        : "Never";
+    const nextDistributionDate =
+      lastDistribution > 0n
+        ? new Date(
+            (Number(lastDistribution) + 30 * 24 * 3600) * 1000
+          ).toLocaleDateString()
+        : "N/A";
+    return {
+      propertyId: property.id.toString(),
+      address: property.metadataURI, // Replace with actual address if available
+      balance: formatUSDC(rentPool),
+      totalDistributed: "0.00", // Mocked
+      lastDistribution: lastDistributionDate,
+      upkeepStatus,
+      tokenHolders: 0, // Mocked
+      nextDistribution: nextDistributionDate,
+    };
+  });
+
+  // Stats
   const stats = [
     {
       title: "Total Rent Pool",
-      value: "$16,150",
-      change: "+12.5%",
+      value: rentPoolLoading ? "Loading..." : `$${formatUSDC(totalRentPool)}`,
+      change: "+12.5%", // Mocked
       icon: DollarSign,
       color: "from-green-500 to-emerald-500",
     },
     {
       title: "Properties Active",
-      value: "3",
-      change: "+1 this month",
+      value: propertiesLoading ? "Loading..." : properties.length.toString(),
+      change: "+1 this month", // Mocked
       icon: Building2,
       color: "from-blue-500 to-cyan-500",
     },
     {
       title: "Total Distributed",
-      value: "$56,750",
-      change: "+8.2%",
+      value: "$0.00", // Mocked
+      change: "+8.2%", // Mocked
       icon: TrendingUp,
       color: "from-purple-500 to-pink-500",
     },
     {
       title: "Token Holders",
-      value: "144",
-      change: "+23 this month",
+      value: "0", // Mocked
+      change: "+23 this month", // Mocked
       icon: Users,
       color: "from-orange-500 to-red-500",
     },
   ];
-
-  // useEffect(() => {
-  //   // Check if user is owner (mock implementation)
-  //   setIsOwner(wallet.address === "0x1234567890123456789012345678901234567890");
-  // }, [wallet.address]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -109,12 +146,16 @@ const RentDistribution: React.FC = () => {
 
   const handleDepositRent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isReady || !isOwner) return;
+    if (!isPropertyOwner) return;
 
     setLoading(true);
     try {
-      // Mock implementation - would call actual contract
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const propertyId = BigInt(formData.propertyId);
+      const amount = parseUnits(formData.amount, 6); // Assuming 6 decimals for USDC
+      await rentDistributionHook.writeContract("depositRent", [
+        propertyId,
+        amount,
+      ]);
       toast.success(
         `Rent deposited successfully for Property #${formData.propertyId}`
       );
@@ -136,6 +177,14 @@ const RentDistribution: React.FC = () => {
     return matchesSearch && matchesFilter;
   });
 
+  if (propertiesLoading || rentPoolLoading || lastDistributionLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (propertiesError) {
+    return <div>Error: {propertiesError}</div>;
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -152,7 +201,7 @@ const RentDistribution: React.FC = () => {
             Manage rental income distribution to token holders
           </p>
         </div>
-        {isOwner && (
+        {isPropertyOwner && (
           <div className="mt-4 md:mt-0 bg-gradient-to-r from-primary-50 to-secondary-50 dark:from-primary-900/20 dark:to-secondary-900/20 rounded-lg px-4 py-2">
             <span className="text-sm font-medium text-primary-700 dark:text-primary-300">
               Owner Access Enabled
@@ -192,7 +241,7 @@ const RentDistribution: React.FC = () => {
       </div>
 
       {/* Deposit Rent Form (Owner Only) */}
-      {isOwner && (
+      {isPropertyOwner && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -283,7 +332,7 @@ const RentDistribution: React.FC = () => {
       )}
 
       {/* Non-Owner Message */}
-      {!isOwner && (
+      {!isPropertyOwner && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
